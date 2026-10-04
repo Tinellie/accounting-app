@@ -24,6 +24,7 @@ export async function createCategoryAction(
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
+    icon: formData.get("icon"),
     color: formData.get("color"),
     sortOrder: formData.get("sortOrder") ?? undefined,
   });
@@ -90,6 +91,7 @@ export async function updateCategoryAction(
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
+    icon: formData.get("icon"),
     color: formData.get("color"),
     sortOrder: formData.get("sortOrder") ?? undefined,
   });
@@ -165,6 +167,7 @@ export async function updateCategoryAction(
           name: categoryInput.name,
           type: categoryInput.type,
           parentId: categoryInput.parentId,
+          icon: categoryInput.icon,
           color,
         })
         .where(eq(categories.id, categoryInput.id))

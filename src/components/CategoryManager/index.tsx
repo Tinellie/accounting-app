@@ -11,7 +11,7 @@ import CategoryForm from './CategoryForm';
 import CategoryList from './CategoryList';
 import type { CategoryManagerProps, CategoryRecord } from './types';
 
-export default function CategoryManager({ categories }: CategoryManagerProps) {
+export default function CategoryManager({ categories, iconNames }: CategoryManagerProps) {
   const [editingCategory, setEditingCategory] = useState<CategoryRecord | null | undefined>(undefined);
   const closeDialog = () => setEditingCategory(undefined);
 
@@ -33,6 +33,7 @@ export default function CategoryManager({ categories }: CategoryManagerProps) {
               key={editingCategory?.id ?? 'new-category'}
               category={editingCategory}
               categories={categories}
+              iconNames={iconNames}
               onCancel={closeDialog}
             />
           ) : null}

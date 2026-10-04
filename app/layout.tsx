@@ -1,3 +1,4 @@
+import "@fontsource/material-icons/400.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Box from "@mui/material/Box";

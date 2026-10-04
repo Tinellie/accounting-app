@@ -55,7 +55,10 @@ export const createCategorySchema = z.object({
   name: nameSchema,
   type: z.enum(["expense", "income"]),
   parentId: nullableIdSchema,
-  icon: str.max(100, "图标名称不能超过 100 个字符").optional(),
+  icon: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    str.max(100, "图标名称不能超过 100 个字符").nullable(),
+  ),
   color: nullableColorSchema,
   sortOrder: int.nonnegative().default(0),
 });

@@ -5,12 +5,14 @@ export type CategoryRecord = {
   name: string;
   type: 'expense' | 'income';
   parentId: number | null;
+  icon: string | null;
   color: string | null;
   sortOrder: number;
 };
 
 export type CategoryManagerProps = {
   categories: CategoryRecord[];
+  iconNames: string[];
 };
 
 export const initialActionState: CategoryActionState = { success: false, message: '' };
