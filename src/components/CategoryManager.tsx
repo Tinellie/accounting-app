@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useState, useTransition, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,17 +9,30 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import CategoryColorPicker from '@/src/components/CategoryColorPicker';
 import {
   createCategoryAction,
   deleteCategoryAction,
+  reorderCategoriesAction,
   updateCategoryAction,
   type CategoryActionState,
 } from '@/app/categories/actions';
@@ -72,16 +85,16 @@ export default function CategoryManager({ categories }: CategoryManagerProps) {
             {typeRoots.length === 0 ? (
               <Typography color="text.secondary" sx={{ py: 1.5 }}>暂无{type.label}分类</Typography>
             ) : (
-              <Stack spacing={1.5}>
-                {typeRoots.map((category) => (
+              <SortableCategoryGroup id={`category-roots-${type.value}`} categories={typeRoots}>
+                {(category, dragHandle) => (
                   <CategoryCard
-                    key={category.id}
                     category={category}
                     subcategories={categories.filter((item) => item.parentId === category.id)}
                     onEdit={setEditingCategory}
+                    dragHandle={dragHandle}
                   />
-                ))}
-              </Stack>
+                )}
+              </SortableCategoryGroup>
             )}
           </Box>
         );
@@ -113,10 +126,11 @@ type CategoryCardProps = {
   category: CategoryRecord;
   subcategories: CategoryRecord[];
   onEdit: (category: CategoryRecord) => void;
+  dragHandle: ReactNode;
 };
 
 // 展示一个一级分类及其下属的二级分类。
-function CategoryCard({ category, subcategories, onEdit }: CategoryCardProps) {
+function CategoryCard({ category, subcategories, onEdit, dragHandle }: CategoryCardProps) {
   const rootColor = category.color ?? fallbackCategoryColor(category.id);
 
   return (
@@ -127,19 +141,27 @@ function CategoryCard({ category, subcategories, onEdit }: CategoryCardProps) {
       variant="outlined"
       sx={{ p: 2, borderColor: 'divider' }}
     >
-      <CategoryRow category={category} color={rootColor} onEdit={onEdit} hasChildren={subcategories.length > 0} />
+      <CategoryRow
+        category={category}
+        color={rootColor}
+        onEdit={onEdit}
+        hasChildren={subcategories.length > 0}
+        dragHandle={dragHandle}
+      />
       {subcategories.length > 0 ? (
-        <Stack spacing={1} sx={{ mt: 1.5, ml: { xs: 1, sm: 3 }, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
-          {subcategories.map((child) => (
-            <CategoryRow
-              key={child.id}
-              category={child}
-              color={child.color ?? rootColor}
-              onEdit={onEdit}
-              hasChildren={false}
-            />
-          ))}
-        </Stack>
+        <Box sx={{ mt: 1.5, ml: { xs: 1, sm: 3 }, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
+          <SortableCategoryGroup id={`category-children-${category.id}`} categories={subcategories}>
+            {(child, childDragHandle) => (
+              <CategoryRow
+                category={child}
+                color={child.color ?? rootColor}
+                onEdit={onEdit}
+                hasChildren={false}
+                dragHandle={childDragHandle}
+              />
+            )}
+          </SortableCategoryGroup>
+        </Box>
       ) : null}
     </Paper>
   );
@@ -150,12 +172,14 @@ type CategoryRowProps = {
   color: string;
   onEdit: (category: CategoryRecord) => void;
   hasChildren: boolean;
+  dragHandle: ReactNode;
 };
 
 // 显示分类名称和编辑、删除操作。
-function CategoryRow({ category, color, onEdit, hasChildren }: CategoryRowProps) {
+function CategoryRow({ category, color, onEdit, hasChildren, dragHandle }: CategoryRowProps) {
   return (
     <Box className="category-row" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      {dragHandle}
       <Box aria-hidden="true" sx={{ width: 4, height: 24, flexShrink: 0, borderRadius: 1, bgcolor: color }} />
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
         <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -167,6 +191,108 @@ function CategoryRow({ category, color, onEdit, hasChildren }: CategoryRowProps)
           <DeleteCategoryControl category={category} disabled={hasChildren} />
         </Box>
       </Box>
+    </Box>
+  );
+}
+
+type SortableCategoryGroupProps = {
+  id: string;
+  categories: CategoryRecord[];
+  children: (category: CategoryRecord, dragHandle: ReactNode) => ReactNode;
+};
+
+function SortableCategoryGroup({ id, categories, children }: SortableCategoryGroupProps) {
+  const [categoryOrder, setCategoryOrder] = useState(() => categories.map((category) => category.id));
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isPending, startTransition] = useTransition();
+  const categoriesById = new Map(categories.map((category) => [category.id, category]));
+  const orderedCategories = [
+    ...categoryOrder.flatMap((id) => {
+      const category = categoriesById.get(id);
+      return category ? [category] : [];
+    }),
+    ...categories.filter((category) => !categoryOrder.includes(category.id)),
+  ];
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    if (isPending || !event.over || event.active.id === event.over.id) return;
+
+    const oldIndex = orderedCategories.findIndex((category) => category.id === event.active.id);
+    const newIndex = orderedCategories.findIndex((category) => category.id === event.over?.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const previousOrder = categoryOrder;
+    const nextOrder = arrayMove(orderedCategories, oldIndex, newIndex);
+    const nextIds = nextOrder.map((category) => category.id);
+    setCategoryOrder(nextIds);
+    setErrorMessage('');
+
+    startTransition(async () => {
+      const result = await reorderCategoriesAction(nextIds);
+      if (!result.success) {
+        setCategoryOrder(previousOrder);
+        setErrorMessage(result.message);
+      }
+    });
+  }
+
+  return (
+    <DndContext id={id} sensors={sensors} onDragEnd={handleDragEnd}>
+      <SortableContext items={orderedCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+        <Stack spacing={1.5}>
+          {orderedCategories.map((category) => (
+            <SortableCategoryItem key={category.id} category={category} disabled={isPending}>
+              {(dragHandle) => children(category, dragHandle)}
+            </SortableCategoryItem>
+          ))}
+          {errorMessage ? <Alert severity="error" role="status">{errorMessage}</Alert> : null}
+        </Stack>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+type SortableCategoryItemProps = {
+  category: CategoryRecord;
+  disabled: boolean;
+  children: (dragHandle: ReactNode) => ReactNode;
+};
+
+function SortableCategoryItem({ category, disabled, children }: SortableCategoryItemProps) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id, disabled });
+
+  return (
+    <Box
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      sx={{ opacity: isDragging ? 0.55 : 1, position: 'relative', zIndex: isDragging ? 1 : 'auto' }}
+    >
+      {children(
+        <Tooltip title={`拖动${category.name}调整顺序`}>
+          <IconButton
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label={`拖动${category.name}调整顺序`}
+            size="small"
+            sx={{ cursor: 'grab', touchAction: 'none', '&:active': { cursor: 'grabbing' } }}
+          >
+            <DragIndicatorIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>,
+      )}
     </Box>
   );
 }

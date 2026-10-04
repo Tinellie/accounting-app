@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/src/db";
 import { categories, transactions } from "@/src/db/schema";
 import { chooseCategoryColor } from "@/src/lib/category-colors";
@@ -44,6 +45,17 @@ export async function createCategoryAction(
         }
       }
 
+      const siblingFilter = parsed.data.parentId === null
+        ? and(eq(categories.type, parsed.data.type), isNull(categories.parentId))
+        : eq(categories.parentId, parsed.data.parentId);
+      const lastSibling = tx.select({ sortOrder: categories.sortOrder })
+        .from(categories)
+        .where(siblingFilter)
+        .orderBy(desc(categories.sortOrder))
+        .limit(1)
+        .get();
+      const sortOrder = (lastSibling?.sortOrder ?? -1) + 1;
+
       const color = parsed.data.parentId === null && parsed.data.color === null
         ? chooseCategoryColor(
             tx.select({ color: categories.color })
@@ -54,7 +66,7 @@ export async function createCategoryAction(
           )
         : parsed.data.color;
 
-      tx.insert(categories).values({ ...parsed.data, color }).run();
+      tx.insert(categories).values({ ...parsed.data, color, sortOrder }).run();
     });
   } catch (error) {
     if (error instanceof CategoryActionError) {
@@ -168,6 +180,66 @@ export async function updateCategoryAction(
   revalidatePath("/categories");
   revalidatePath("/transactions");
   return { success: true, message: "分类信息已更新" };
+}
+
+/** 在同一个分类层级和收支类型内保存新的排序。 */
+export async function reorderCategoriesAction(categoryIds: number[]): Promise<CategoryActionState> {
+  const parsedIds = z.array(positiveIdSchema).min(1).max(500).safeParse(categoryIds);
+  if (!parsedIds.success || new Set(parsedIds.data).size !== parsedIds.data.length) {
+    return { success: false, message: "分类排序数据无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selectedCategories = tx.select({
+        id: categories.id,
+        type: categories.type,
+        parentId: categories.parentId,
+      })
+        .from(categories)
+        .where(inArray(categories.id, parsedIds.data))
+        .all();
+      const firstCategory = selectedCategories[0];
+
+      if (
+        selectedCategories.length !== parsedIds.data.length ||
+        !firstCategory ||
+        selectedCategories.some((category) => (
+          category.type !== firstCategory.type || category.parentId !== firstCategory.parentId
+        ))
+      ) {
+        throw new CategoryActionError("只能在同级分类之间调整顺序");
+      }
+
+      const siblingFilter = firstCategory.parentId === null
+        ? and(eq(categories.type, firstCategory.type), isNull(categories.parentId))
+        : eq(categories.parentId, firstCategory.parentId);
+      const siblings = tx.select({ id: categories.id })
+        .from(categories)
+        .where(siblingFilter)
+        .all();
+
+      if (
+        siblings.length !== parsedIds.data.length ||
+        siblings.some((sibling) => !parsedIds.data.includes(sibling.id))
+      ) {
+        throw new CategoryActionError("分类列表已变化，请刷新后重新排序");
+      }
+
+      parsedIds.data.forEach((id, index) => {
+        tx.update(categories).set({ sortOrder: index }).where(eq(categories.id, id)).run();
+      });
+    });
+  } catch (error) {
+    if (error instanceof CategoryActionError) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: "保存分类顺序失败，请稍后重试" };
+  }
+
+  revalidatePath("/categories");
+  revalidatePath("/transactions");
+  return { success: true, message: "分类顺序已保存" };
 }
 
 /** 仅删除没有子分类且没有关联流水的分类。 */
