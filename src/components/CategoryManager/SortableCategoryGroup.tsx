@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type ReactNode } from 'react';
+import { useMemo, useState, useTransition, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -19,14 +19,20 @@ export default function SortableCategoryGroup({ id, categories, children }: Sort
   const [categoryOrder, setCategoryOrder] = useState(() => categories.map((category) => category.id));
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
-  const categoriesById = new Map(categories.map((category) => [category.id, category]));
-  const orderedCategories = [
-    ...categoryOrder.flatMap((categoryId) => {
-      const category = categoriesById.get(categoryId);
-      return category ? [category] : [];
-    }),
-    ...categories.filter((category) => !categoryOrder.includes(category.id)),
-  ];
+  const orderedCategories = useMemo(() => {
+    const categoriesById = new Map(categories.map((category) => [category.id, category]));
+    return [
+      ...categoryOrder.flatMap((categoryId) => {
+        const category = categoriesById.get(categoryId);
+        return category ? [category] : [];
+      }),
+      ...categories.filter((category) => !categoryOrder.includes(category.id)),
+    ];
+  }, [categories, categoryOrder]);
+  const orderedCategoryIds = useMemo(
+    () => orderedCategories.map((category) => category.id),
+    [orderedCategories],
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -55,7 +61,7 @@ export default function SortableCategoryGroup({ id, categories, children }: Sort
 
   return (
     <DndContext id={id} sensors={sensors} onDragEnd={handleDragEnd}>
-      <SortableContext items={orderedCategories.map((category) => category.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={orderedCategoryIds} strategy={verticalListSortingStrategy}>
         <Stack spacing={1.5}>
           {orderedCategories.map((category) => (
             <SortableCategoryItem key={category.id} category={category} disabled={isPending}>

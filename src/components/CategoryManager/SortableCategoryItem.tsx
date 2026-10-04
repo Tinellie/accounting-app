@@ -38,7 +38,15 @@ export default function SortableCategoryItem({ category, disabled, children }: S
             {...listeners}
             aria-label={`拖动${category.name}调整顺序`}
             size="small"
-            sx={{ cursor: 'grab', touchAction: 'none', '&:active': { cursor: 'grabbing' } }}
+            sx={{
+              width: 24,
+              minWidth: 24,
+              height: 28,
+              p: 0,
+              cursor: 'grab',
+              touchAction: 'none',
+              '&:active': { cursor: 'grabbing' },
+            }}
           >
             <DragIndicatorIcon fontSize="small" />
           </IconButton>

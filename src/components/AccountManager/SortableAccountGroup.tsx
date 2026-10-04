@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type ReactNode } from 'react';
+import { useMemo, useState, useTransition, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -36,18 +36,26 @@ export default function SortableAccountGroup({ accounts, isArchived, onEdit }: S
   const [accountOrder, setAccountOrder] = useState(() => accounts.map((account) => account.id));
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
-  const accountsById = new Map(accounts.map((account) => [account.id, account]));
-  const orderedAccounts = accountOrder.flatMap((id) => {
-    const account = accountsById.get(id);
-    return account ? [account] : [];
-  });
+  const orderedAccounts = useMemo(() => {
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
+    const ordered = accountOrder.flatMap((id) => {
+      const account = accountsById.get(id);
+      return account ? [account] : [];
+    });
 
-  for (const account of accounts) {
-    if (accountOrder.includes(account.id)) continue;
-    const insertIndex = orderedAccounts.findIndex((item) => account.sortOrder < item.sortOrder);
-    if (insertIndex < 0) orderedAccounts.push(account);
-    else orderedAccounts.splice(insertIndex, 0, account);
-  }
+    for (const account of accounts) {
+      if (accountOrder.includes(account.id)) continue;
+      const insertIndex = ordered.findIndex((item) => account.sortOrder < item.sortOrder);
+      if (insertIndex < 0) ordered.push(account);
+      else ordered.splice(insertIndex, 0, account);
+    }
+
+    return ordered;
+  }, [accounts, accountOrder]);
+  const orderedAccountIds = useMemo(
+    () => orderedAccounts.map((account) => account.id),
+    [orderedAccounts],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -81,7 +89,7 @@ export default function SortableAccountGroup({ accounts, isArchived, onEdit }: S
       sensors={sensors}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={orderedAccounts.map((account) => account.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={orderedAccountIds} strategy={verticalListSortingStrategy}>
         <Stack className="account-list" spacing={1.5}>
           {orderedAccounts.map((account) => (
             <SortableAccountItem
