@@ -1,0 +1,184 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
+import { db } from "@/src/db";
+import { categories, transactions } from "@/src/db/schema";
+import { createCategorySchema, positiveIdSchema, updateCategorySchema } from "@/src/lib/validations";
+
+export type CategoryActionState = {
+  success: boolean;
+  message: string;
+};
+
+class CategoryActionError extends Error {}
+
+/** 新建一级分类或挂在一级分类下的二级分类。 */
+export async function createCategoryAction(
+  _previousState: CategoryActionState,
+  formData: FormData,
+): Promise<CategoryActionState> {
+  const parsed = createCategorySchema.safeParse({
+    name: formData.get("name"),
+    type: formData.get("type"),
+    parentId: formData.get("parentId"),
+    sortOrder: formData.get("sortOrder") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "请检查分类信息" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      if (parsed.data.parentId !== null) {
+        const parent = tx.select({ id: categories.id, type: categories.type, parentId: categories.parentId })
+          .from(categories)
+          .where(eq(categories.id, parsed.data.parentId))
+          .get();
+
+        if (!parent || parent.type !== parsed.data.type || parent.parentId !== null) {
+          throw new CategoryActionError("子分类必须选择同类型的一级分类");
+        }
+      }
+
+      tx.insert(categories).values(parsed.data).run();
+    });
+  } catch (error) {
+    if (error instanceof CategoryActionError) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: "添加分类失败，请稍后重试" };
+  }
+
+  revalidatePath("/categories");
+  revalidatePath("/transactions");
+  return { success: true, message: "分类已添加" };
+}
+
+/** 修改分类名称、类型或所属一级分类，并维护最多两层的分类结构。 */
+export async function updateCategoryAction(
+  _previousState: CategoryActionState,
+  formData: FormData,
+): Promise<CategoryActionState> {
+  const parsed = updateCategorySchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    type: formData.get("type"),
+    parentId: formData.get("parentId"),
+    sortOrder: formData.get("sortOrder") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "请检查分类信息" };
+  }
+
+  const categoryInput = parsed.data;
+
+  try {
+    db.transaction((tx) => {
+      const current = tx.select({ id: categories.id, type: categories.type, parentId: categories.parentId })
+        .from(categories)
+        .where(eq(categories.id, categoryInput.id))
+        .get();
+
+      if (!current) {
+        throw new CategoryActionError("分类不存在");
+      }
+
+      if (categoryInput.type !== current.type) {
+        const linkedTransaction = tx.select({ id: transactions.id })
+          .from(transactions)
+          .where(eq(transactions.categoryId, categoryInput.id))
+          .limit(1)
+          .get();
+
+        if (linkedTransaction) {
+          throw new CategoryActionError("已有流水的分类不能更改收支类型");
+        }
+      }
+
+      const child = tx.select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.parentId, categoryInput.id))
+        .limit(1)
+        .get();
+
+      if (child && (categoryInput.type !== current.type || categoryInput.parentId !== null)) {
+        throw new CategoryActionError("含有子分类的一级分类不能更改类型或移入其他分类");
+      }
+
+      if (categoryInput.parentId !== null) {
+        const parent = tx.select({ id: categories.id, type: categories.type, parentId: categories.parentId })
+          .from(categories)
+          .where(eq(categories.id, categoryInput.parentId))
+          .get();
+
+        if (
+          !parent ||
+          parent.id === categoryInput.id ||
+          parent.type !== categoryInput.type ||
+          parent.parentId !== null
+        ) {
+          throw new CategoryActionError("子分类必须选择同类型的一级分类");
+        }
+      }
+
+      tx.update(categories)
+        .set({ name: categoryInput.name, type: categoryInput.type, parentId: categoryInput.parentId })
+        .where(eq(categories.id, categoryInput.id))
+        .run();
+    });
+  } catch (error) {
+    if (error instanceof CategoryActionError) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: "更新分类失败，请稍后重试" };
+  }
+
+  revalidatePath("/categories");
+  revalidatePath("/transactions");
+  return { success: true, message: "分类信息已更新" };
+}
+
+/** 仅删除没有子分类且没有关联流水的分类。 */
+export async function deleteCategoryAction(
+  _previousState: CategoryActionState,
+  formData: FormData,
+): Promise<CategoryActionState> {
+  const parsedId = positiveIdSchema.safeParse(formData.get("id"));
+  if (!parsedId.success) {
+    return { success: false, message: "分类编号无效" };
+  }
+  const categoryId = parsedId.data;
+
+  try {
+    db.transaction((tx) => {
+      const child = tx.select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.parentId, categoryId))
+        .limit(1)
+        .get();
+      const transaction = tx.select({ id: transactions.id })
+        .from(transactions)
+        .where(eq(transactions.categoryId, categoryId))
+        .limit(1)
+        .get();
+
+      if (child || transaction) {
+        throw new CategoryActionError("该分类仍有子分类或关联流水，不能删除");
+      }
+
+      tx.delete(categories).where(eq(categories.id, categoryId)).run();
+    });
+  } catch (error) {
+    if (error instanceof CategoryActionError) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: "删除分类失败，请稍后重试" };
+  }
+
+  revalidatePath("/categories");
+  revalidatePath("/transactions");
+  return { success: true, message: "分类已删除" };
+}
