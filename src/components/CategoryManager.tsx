@@ -16,18 +16,21 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CategoryColorPicker from '@/src/components/CategoryColorPicker';
 import {
   createCategoryAction,
   deleteCategoryAction,
   updateCategoryAction,
   type CategoryActionState,
 } from '@/app/categories/actions';
+import { fallbackCategoryColor } from '@/src/lib/category-colors';
 
 type CategoryRecord = {
   id: number;
   name: string;
   type: 'expense' | 'income';
   parentId: number | null;
+  color: string | null;
   sortOrder: number;
 };
 
@@ -114,6 +117,8 @@ type CategoryCardProps = {
 
 // 展示一个一级分类及其下属的二级分类。
 function CategoryCard({ category, subcategories, onEdit }: CategoryCardProps) {
+  const rootColor = category.color ?? fallbackCategoryColor(category.id);
+
   return (
     <Paper
       id={`category-${category.id}`}
@@ -122,11 +127,17 @@ function CategoryCard({ category, subcategories, onEdit }: CategoryCardProps) {
       variant="outlined"
       sx={{ p: 2, borderColor: 'divider' }}
     >
-      <CategoryRow category={category} onEdit={onEdit} hasChildren={subcategories.length > 0} />
+      <CategoryRow category={category} color={rootColor} onEdit={onEdit} hasChildren={subcategories.length > 0} />
       {subcategories.length > 0 ? (
         <Stack spacing={1} sx={{ mt: 1.5, ml: { xs: 1, sm: 3 }, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
           {subcategories.map((child) => (
-            <CategoryRow key={child.id} category={child} onEdit={onEdit} hasChildren={false} />
+            <CategoryRow
+              key={child.id}
+              category={child}
+              color={child.color ?? rootColor}
+              onEdit={onEdit}
+              hasChildren={false}
+            />
           ))}
         </Stack>
       ) : null}
@@ -136,21 +147,25 @@ function CategoryCard({ category, subcategories, onEdit }: CategoryCardProps) {
 
 type CategoryRowProps = {
   category: CategoryRecord;
+  color: string;
   onEdit: (category: CategoryRecord) => void;
   hasChildren: boolean;
 };
 
 // 显示分类名称和编辑、删除操作。
-function CategoryRow({ category, onEdit, hasChildren }: CategoryRowProps) {
+function CategoryRow({ category, color, onEdit, hasChildren }: CategoryRowProps) {
   return (
-    <Box className="category-row" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-      <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="body1" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{category.name}</Typography>
-        <Chip label={hasChildren ? '一级' : category.parentId === null ? '一级' : '二级'} size="small" />
-      </Box>
-      <Box sx={{ display: 'flex', flexShrink: 0, gap: 0.5 }}>
-        <Button size="small" onClick={() => onEdit(category)}>编辑</Button>
-        <DeleteCategoryControl category={category} disabled={hasChildren} />
+    <Box className="category-row" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box aria-hidden="true" sx={{ width: 4, height: 24, flexShrink: 0, borderRadius: 1, bgcolor: color }} />
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body1" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{category.name}</Typography>
+          <Chip label={hasChildren ? '一级' : category.parentId === null ? '一级' : '二级'} size="small" />
+        </Box>
+        <Box sx={{ display: 'flex', flexShrink: 0, gap: 0.5 }}>
+          <Button size="small" onClick={() => onEdit(category)}>编辑</Button>
+          <DeleteCategoryControl category={category} disabled={hasChildren} />
+        </Box>
       </Box>
     </Box>
   );
@@ -192,14 +207,20 @@ function CategoryForm({ category, categories, onCancel }: CategoryFormProps) {
   const [state, formAction, isPending] = useActionState(action, initialActionState);
   const [type, setType] = useState<CategoryRecord['type']>(category?.type ?? 'expense');
   const [parentId, setParentId] = useState(String(category?.parentId ?? ''));
+  const [color, setColor] = useState<string | null>(category?.color ?? null);
   const parentOptions = categories.filter(
     (item) => item.parentId === null && item.type === type && item.id !== category?.id,
   );
+  const selectedParent = parentOptions.find((item) => item.id === Number(parentId));
+  const parentColor = selectedParent
+    ? selectedParent.color ?? fallbackCategoryColor(selectedParent.id)
+    : null;
 
   return (
     <Box component="form" action={formAction} sx={{ pt: 1 }}>
       {category ? <input type="hidden" name="id" value={category.id} /> : null}
       <input type="hidden" name="sortOrder" value={category?.sortOrder ?? 0} />
+      <input type="hidden" name="color" value={color ?? ''} />
       <Stack spacing={2}>
         {state.message ? (
           <Alert severity={state.success ? 'success' : 'error'} role="status">{state.message}</Alert>
@@ -249,6 +270,13 @@ function CategoryForm({ category, categories, onCancel }: CategoryFormProps) {
             ))}
           </Select>
         </FormControl>
+
+        <CategoryColorPicker
+          color={color}
+          hasParent={parentId !== ''}
+          parentColor={parentColor}
+          onChange={setColor}
+        />
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
           <Button type="button" onClick={onCancel}>取消</Button>

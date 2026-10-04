@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { db } from "@/src/db";
 import { categories, transactions } from "@/src/db/schema";
+import { chooseCategoryColor } from "@/src/lib/category-colors";
 import { createCategorySchema, positiveIdSchema, updateCategorySchema } from "@/src/lib/validations";
 
 export type CategoryActionState = {
@@ -22,6 +23,7 @@ export async function createCategoryAction(
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
+    color: formData.get("color"),
     sortOrder: formData.get("sortOrder") ?? undefined,
   });
 
@@ -42,7 +44,17 @@ export async function createCategoryAction(
         }
       }
 
-      tx.insert(categories).values(parsed.data).run();
+      const color = parsed.data.parentId === null && parsed.data.color === null
+        ? chooseCategoryColor(
+            tx.select({ color: categories.color })
+              .from(categories)
+              .where(isNull(categories.parentId))
+              .all()
+              .map((category) => category.color),
+          )
+        : parsed.data.color;
+
+      tx.insert(categories).values({ ...parsed.data, color }).run();
     });
   } catch (error) {
     if (error instanceof CategoryActionError) {
@@ -66,6 +78,7 @@ export async function updateCategoryAction(
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
+    color: formData.get("color"),
     sortOrder: formData.get("sortOrder") ?? undefined,
   });
 
@@ -124,8 +137,24 @@ export async function updateCategoryAction(
         }
       }
 
+      const color = categoryInput.parentId === null && categoryInput.color === null
+        ? chooseCategoryColor(
+            tx.select({ id: categories.id, color: categories.color })
+              .from(categories)
+              .where(isNull(categories.parentId))
+              .all()
+              .filter((item) => item.id !== categoryInput.id)
+              .map((item) => item.color),
+          )
+        : categoryInput.color;
+
       tx.update(categories)
-        .set({ name: categoryInput.name, type: categoryInput.type, parentId: categoryInput.parentId })
+        .set({
+          name: categoryInput.name,
+          type: categoryInput.type,
+          parentId: categoryInput.parentId,
+          color,
+        })
         .where(eq(categories.id, categoryInput.id))
         .run();
     });

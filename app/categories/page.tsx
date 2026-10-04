@@ -12,6 +12,7 @@ export default function CategoriesPage() {
       name: categories.name,
       type: categories.type,
       parentId: categories.parentId,
+      color: categories.color,
       sortOrder: categories.sortOrder,
     })
     .from(categories)

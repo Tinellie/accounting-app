@@ -27,6 +27,10 @@ const nullableIdSchema = z.preprocess(
   (value) => (value === "" || value === undefined ? null : value),
   positiveIdSchema.nullable(),
 );
+const nullableColorSchema = z.preprocess(
+  (value) => (value === "" || value === undefined ? null : value),
+  z.string().regex(/^#[\da-fA-F]{6}$/, "请选择有效的十六进制颜色").nullable(),
+);
 
 const accountFields = {
   name: nameSchema,
@@ -52,7 +56,7 @@ export const createCategorySchema = z.object({
   type: z.enum(["expense", "income"]),
   parentId: nullableIdSchema,
   icon: str.max(100, "图标名称不能超过 100 个字符").optional(),
-  color: str.max(50, "颜色值不能超过 50 个字符").optional(),
+  color: nullableColorSchema,
   sortOrder: int.nonnegative().default(0),
 });
 
