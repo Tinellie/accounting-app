@@ -16,9 +16,10 @@ export default async function AccountsPage() {
       balance: accounts.balance,
       currency: accounts.currency,
       isArchived: accounts.isArchived,
+      sortOrder: accounts.sortOrder,
     })
     .from(accounts)
-    .orderBy(asc(accounts.isArchived), asc(accounts.name))
+    .orderBy(asc(accounts.isArchived), asc(accounts.sortOrder), asc(accounts.name))
     .all();
   const availableIcons = await listAccountIcons();
 

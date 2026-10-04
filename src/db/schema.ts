@@ -11,6 +11,7 @@ export const accounts = sqliteTable(
     currency: text('currency').notNull().default('CNY'),
     includeInNetWorth: integer('include_in_net_worth', { mode: 'boolean' }).notNull().default(true),
     isArchived: integer('is_archived', { mode: 'boolean' }).notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   },
 );

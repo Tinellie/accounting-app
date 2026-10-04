@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -14,9 +15,10 @@ import { accountTypes, type AccountRecord } from './types';
 type AccountCardProps = {
   account: AccountRecord;
   onEdit: () => void;
+  dragHandle: ReactNode;
 };
 
-export default function AccountCard({ account, onEdit }: AccountCardProps) {
+export default function AccountCard({ account, onEdit, dragHandle }: AccountCardProps) {
   const typeLabel = accountTypes.find((type) => type.value === account.type)?.label ?? '其他';
 
   return (
@@ -32,36 +34,41 @@ export default function AccountCard({ account, onEdit }: AccountCardProps) {
         borderColor: 'divider',
       }}
     >
-      <CardContent sx={{ minWidth: 0, p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) minmax(180px, auto)' },
-            alignItems: 'center',
-            gap: { xs: 1, sm: 3 },
-          }}
-        >
-            <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Avatar
-                src={accountIconUrl(account.icon)}
-                alt={`${account.name}图标`}
-                variant="rounded"
-                sx={{ width: 48, height: 48, flexShrink: 0 }}
-              >
-                {account.name.slice(0, 1).toUpperCase()}
-              </Avatar>
-              <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                <Typography variant="h2" sx={{ overflowWrap: 'anywhere' }}>{account.name}</Typography>
-                <Chip label={typeLabel} size="small" />
-                {account.isArchived ? <Chip label="已归档" size="small" color="default" /> : null}
+      <CardContent sx={{ minWidth: 0, p: 0, '&:last-child': { pb: 0 } }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr)', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>{dragHandle}</Box>
+          <Box sx={{ minWidth: 0, p: 2.5, pl: 2 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) minmax(180px, auto)' },
+                alignItems: 'center',
+                gap: { xs: 1, sm: 3 },
+              }}
+            >
+              <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Avatar
+                  src={accountIconUrl(account.icon)}
+                  alt={`${account.name}图标`}
+                  variant="rounded"
+                  sx={{ width: 48, height: 48, flexShrink: 0 }}
+                >
+                  {account.name.slice(0, 1).toUpperCase()}
+                </Avatar>
+                <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                  <Typography variant="h2" sx={{ overflowWrap: 'anywhere' }}>{account.name}</Typography>
+                  <Chip label={typeLabel} size="small" />
+                  {account.isArchived ? <Chip label="已归档" size="small" color="default" /> : null}
+                </Box>
               </Box>
-          </Box>
 
-          <Box>
-            <Typography variant="caption" color="text.secondary">当前余额</Typography>
-            <Typography variant="h2" sx={{ fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
-              {account.currency} {formatMinorUnits(account.balance)}
-            </Typography>
+              <Box>
+                <Typography variant="caption" color="text.secondary">当前余额</Typography>
+                <Typography variant="h2" sx={{ fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
+                  {account.currency} {formatMinorUnits(account.balance)}
+                </Typography>
+              </Box>
+            </Box>
           </Box>
         </Box>
       </CardContent>

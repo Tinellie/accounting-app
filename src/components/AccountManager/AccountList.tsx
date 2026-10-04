@@ -2,7 +2,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import AccountCard from './AccountCard';
+import SortableAccountGroup from './SortableAccountGroup';
 import type { AccountRecord } from './types';
 
 type AccountListProps = {
@@ -19,7 +19,7 @@ export default function AccountList({ accounts, onEdit }: AccountListProps) {
       {activeAccounts.length === 0 ? (
         <Alert severity="info">还没有账户。添加现金、银行卡或其他账户后，就可以记录交易。</Alert>
       ) : (
-        <AccountCardList accounts={activeAccounts} onEdit={onEdit} />
+        <SortableAccountGroup accounts={activeAccounts} isArchived={false} onEdit={onEdit} />
       )}
 
       {archivedAccounts.length > 0 ? (
@@ -27,24 +27,9 @@ export default function AccountList({ accounts, onEdit }: AccountListProps) {
           <Typography id="account-archived-title" component="h2" variant="h2" sx={{ mb: 1.5 }}>
             已归档账户
           </Typography>
-          <AccountCardList accounts={archivedAccounts} onEdit={onEdit} />
+          <SortableAccountGroup accounts={archivedAccounts} isArchived onEdit={onEdit} />
         </Box>
       ) : null}
     </Stack>
-  );
-}
-
-type AccountCardListProps = {
-  accounts: AccountRecord[];
-  onEdit: (account: AccountRecord) => void;
-};
-
-function AccountCardList({ accounts, onEdit }: AccountCardListProps) {
-  return (
-    <Box className="account-list" sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1.5 }}>
-      {accounts.map((account) => (
-        <AccountCard key={account.id} account={account} onEdit={() => onEdit(account)} />
-      ))}
-    </Box>
   );
 }

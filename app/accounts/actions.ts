@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, min, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/src/db";
 import { accounts } from "@/src/db/schema";
@@ -51,7 +51,12 @@ export async function createAccountAction(
     }
     uploadedIcon = await saveAccountIcon(formData.get("iconUpload"));
     icon = uploadedIcon ?? icon;
-    db.insert(accounts).values({ ...parsed.data, icon }).run();
+    const firstAccount = db.select({ sortOrder: min(accounts.sortOrder) })
+      .from(accounts)
+      .where(eq(accounts.isArchived, false))
+      .get();
+    const sortOrder = (firstAccount?.sortOrder ?? 0) - 1;
+    db.insert(accounts).values({ ...parsed.data, icon, sortOrder }).run();
   } catch (error) {
     if (uploadedIcon) await deleteAccountIcon(uploadedIcon).catch(() => undefined);
     if (error instanceof AccountIconError) {
@@ -136,6 +141,57 @@ export async function updateAccountAction(
   refresh();
 
   return { success: true, message: "账户信息已更新" };
+}
+
+/** 在活动或归档账户的同一列表内保存新的顺序。 */
+export async function reorderAccountsAction(
+  accountIds: number[],
+  isArchived: boolean,
+): Promise<AccountActionState> {
+  const parsedIds = z.array(positiveIdSchema).min(1).max(500).safeParse(accountIds);
+  const parsedArchived = z.boolean().safeParse(isArchived);
+  if (!parsedIds.success || new Set(parsedIds.data).size !== parsedIds.data.length || !parsedArchived.success) {
+    return { success: false, message: "账户排序数据无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selectedAccounts = tx.select({ id: accounts.id, isArchived: accounts.isArchived })
+        .from(accounts)
+        .where(inArray(accounts.id, parsedIds.data))
+        .all();
+      if (
+        selectedAccounts.length !== parsedIds.data.length ||
+        selectedAccounts.some((account) => account.isArchived !== parsedArchived.data)
+      ) {
+        throw new Error("只能在同一账户列表内调整顺序");
+      }
+
+      const siblings = tx.select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.isArchived, parsedArchived.data))
+        .orderBy(asc(accounts.sortOrder), asc(accounts.name))
+        .all();
+      if (
+        siblings.length !== parsedIds.data.length ||
+        siblings.some((sibling) => !parsedIds.data.includes(sibling.id))
+      ) {
+        throw new Error("账户列表已变化，请刷新后重新排序");
+      }
+
+      parsedIds.data.forEach((id, index) => {
+        tx.update(accounts).set({ sortOrder: index }).where(eq(accounts.id, id)).run();
+      });
+    });
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "保存账户顺序失败，请稍后重试",
+    };
+  }
+
+  revalidatePath("/accounts");
+  return { success: true, message: "账户顺序已保存" };
 }
 
 /** 归档或恢复账户，保留已有流水和余额。 */

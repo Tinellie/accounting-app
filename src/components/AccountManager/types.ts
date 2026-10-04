@@ -8,6 +8,7 @@ export type AccountRecord = {
   balance: number;
   currency: string;
   isArchived: boolean;
+  sortOrder: number;
 };
 
 export type AccountManagerProps = {
