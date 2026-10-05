@@ -10,6 +10,7 @@ export default async function AccountsPage() {
   const accountRows = db
     .select({
       id: accounts.id,
+      code: accounts.code,
       name: accounts.name,
       icon: accounts.icon,
       type: accounts.type,
@@ -19,7 +20,7 @@ export default async function AccountsPage() {
       sortOrder: accounts.sortOrder,
     })
     .from(accounts)
-    .orderBy(asc(accounts.isArchived), asc(accounts.sortOrder), asc(accounts.name))
+    .orderBy(asc(accounts.isArchived), asc(accounts.type), asc(accounts.sortOrder), asc(accounts.name))
     .all();
   const availableIcons = await listAccountIcons();
 

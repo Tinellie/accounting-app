@@ -22,6 +22,7 @@ import type { AccountRecord } from './types';
 
 type SortableAccountGroupProps = {
   accounts: AccountRecord[];
+  accountType: AccountRecord['type'];
   isArchived: boolean;
   onEdit: (account: AccountRecord) => void;
 };
@@ -32,7 +33,7 @@ type SortableAccountItemProps = {
   children: (dragHandle: ReactNode) => ReactNode;
 };
 
-export default function SortableAccountGroup({ accounts, isArchived, onEdit }: SortableAccountGroupProps) {
+export default function SortableAccountGroup({ accounts, accountType, isArchived, onEdit }: SortableAccountGroupProps) {
   const [accountOrder, setAccountOrder] = useState(() => accounts.map((account) => account.id));
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -75,7 +76,7 @@ export default function SortableAccountGroup({ accounts, isArchived, onEdit }: S
     setErrorMessage('');
 
     startTransition(async () => {
-      const result = await reorderAccountsAction(nextIds, isArchived);
+      const result = await reorderAccountsAction(nextIds, isArchived, accountType);
       if (!result.success) {
         setAccountOrder(previousOrder);
         setErrorMessage(result.message);
@@ -85,7 +86,7 @@ export default function SortableAccountGroup({ accounts, isArchived, onEdit }: S
 
   return (
     <DndContext
-      id={isArchived ? 'account-order-archived' : 'account-order-active'}
+      id={`account-order-${isArchived ? 'archived' : 'active'}-${accountType}`}
       sensors={sensors}
       onDragEnd={handleDragEnd}
     >

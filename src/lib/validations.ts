@@ -4,6 +4,9 @@ import { toMinorUnits } from "./money";
 const str = z.string().trim();
 const int = z.coerce.number().int();
 const nameSchema = str.min(1, "名称不能为空").max(100, "名称不能超过 100 个字符");
+const accountCodeSchema = str
+  .regex(/^[A-Za-z0-9_-]{1,50}$/, "账户代码只能包含英文字母、数字、连字符和下划线")
+  .transform((value) => value.toLowerCase());
 
 export const positiveIdSchema = int.positive().refine(Number.isSafeInteger, "编号无效");
 
@@ -33,6 +36,7 @@ const nullableColorSchema = z.preprocess(
 );
 
 const accountFields = {
+  code: accountCodeSchema,
   name: nameSchema,
   type: z.enum(["checking", "savings", "credit", "cash", "other"]),
 };

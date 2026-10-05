@@ -33,6 +33,7 @@ export async function createAccountAction(
 ): Promise<AccountActionState> {
   const parsed = createAccountSchema.safeParse({
     name: formData.get("name"),
+    code: formData.get("code"),
     type: formData.get("type"),
     balance: formData.get("balance"),
     currency: formData.get("currency"),
@@ -41,6 +42,12 @@ export async function createAccountAction(
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message ?? "请检查账户信息" };
   }
+
+  const codeExists = db.select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.code, parsed.data.code))
+    .get();
+  if (codeExists) return { success: false, message: "账户代码已被使用" };
 
   let icon: string | null = null;
   let uploadedIcon: string | null = null;
@@ -53,7 +60,7 @@ export async function createAccountAction(
     icon = uploadedIcon ?? icon;
     const firstAccount = db.select({ sortOrder: min(accounts.sortOrder) })
       .from(accounts)
-      .where(eq(accounts.isArchived, false))
+      .where(and(eq(accounts.isArchived, false), eq(accounts.type, parsed.data.type)))
       .get();
     const sortOrder = (firstAccount?.sortOrder ?? 0) - 1;
     db.insert(accounts).values({ ...parsed.data, icon, sortOrder }).run();
@@ -77,6 +84,7 @@ export async function updateAccountAction(
 ): Promise<AccountActionState> {
   const parsed = updateAccountSchema.safeParse({
     id: formData.get("id"),
+    code: formData.get("code"),
     name: formData.get("name"),
     type: formData.get("type"),
   });
@@ -85,8 +93,8 @@ export async function updateAccountAction(
     return { success: false, message: parsed.error.issues[0]?.message ?? "请检查账户信息" };
   }
 
-  const { id, name, type } = parsed.data;
-  const existingAccount = db.select({ id: accounts.id, icon: accounts.icon, isArchived: accounts.isArchived })
+  const { id, code, name, type } = parsed.data;
+  const existingAccount = db.select({ id: accounts.id, code: accounts.code, icon: accounts.icon, isArchived: accounts.isArchived })
     .from(accounts)
     .where(eq(accounts.id, id))
     .get();
@@ -94,6 +102,12 @@ export async function updateAccountAction(
   if (!existingAccount || existingAccount.isArchived) {
     return { success: false, message: "账户不存在或已归档" };
   }
+
+  const duplicateCode = db.select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.code, code), ne(accounts.id, id)))
+    .get();
+  if (duplicateCode) return { success: false, message: "账户代码已被使用" };
 
   let uploadedIcon: string | null = null;
   let nextIcon: string | null = null;
@@ -106,7 +120,7 @@ export async function updateAccountAction(
     uploadedIcon = await saveAccountIcon(formData.get("iconUpload"));
     nextIcon = uploadedIcon ?? selectedIcon;
     db.update(accounts)
-      .set({ name, type, icon: nextIcon })
+      .set({ code, name, type, icon: nextIcon })
       .where(eq(accounts.id, id))
       .run();
   } catch (error) {
@@ -147,29 +161,38 @@ export async function updateAccountAction(
 export async function reorderAccountsAction(
   accountIds: number[],
   isArchived: boolean,
+  accountType: string,
 ): Promise<AccountActionState> {
   const parsedIds = z.array(positiveIdSchema).min(1).max(500).safeParse(accountIds);
   const parsedArchived = z.boolean().safeParse(isArchived);
-  if (!parsedIds.success || new Set(parsedIds.data).size !== parsedIds.data.length || !parsedArchived.success) {
+  const parsedType = z.enum(["checking", "savings", "credit", "cash", "other"]).safeParse(accountType);
+  if (
+    !parsedIds.success ||
+    new Set(parsedIds.data).size !== parsedIds.data.length ||
+    !parsedArchived.success ||
+    !parsedType.success
+  ) {
     return { success: false, message: "账户排序数据无效" };
   }
 
   try {
     db.transaction((tx) => {
-      const selectedAccounts = tx.select({ id: accounts.id, isArchived: accounts.isArchived })
+      const selectedAccounts = tx.select({ id: accounts.id, isArchived: accounts.isArchived, type: accounts.type })
         .from(accounts)
         .where(inArray(accounts.id, parsedIds.data))
         .all();
       if (
         selectedAccounts.length !== parsedIds.data.length ||
-        selectedAccounts.some((account) => account.isArchived !== parsedArchived.data)
+        selectedAccounts.some((account) => (
+          account.isArchived !== parsedArchived.data || account.type !== parsedType.data
+        ))
       ) {
         throw new Error("只能在同一账户列表内调整顺序");
       }
 
       const siblings = tx.select({ id: accounts.id })
         .from(accounts)
-        .where(eq(accounts.isArchived, parsedArchived.data))
+        .where(and(eq(accounts.isArchived, parsedArchived.data), eq(accounts.type, parsedType.data)))
         .orderBy(asc(accounts.sortOrder), asc(accounts.name))
         .all();
       if (

@@ -1,9 +1,10 @@
-import { sqliteTable, text, integer, primaryKey, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 export const accounts = sqliteTable(
   'accounts',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
+    code: text('code'),
     name: text('name').notNull(),
     icon: text('icon'),
     type: text('type', { enum: ['checking', 'savings', 'credit', 'cash', 'other'] }).notNull(),
@@ -14,6 +15,7 @@ export const accounts = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   },
+  (table) => [uniqueIndex('accounts_code_unique').on(table.code)],
 );
 
 export const categories = sqliteTable(

@@ -26,6 +26,7 @@ type AccountFormProps = {
 export default function AccountForm({ account, icons, onCancel }: AccountFormProps) {
   const action = account ? updateAccountAction : createAccountAction;
   const [state, formAction, isPending] = useActionState<AccountActionState, FormData>(action, initialActionState);
+  const [code, setCode] = useState(account ? account.code ?? `account-${account.id}` : '');
   const [name, setName] = useState(account?.name ?? '');
   const [type, setType] = useState<AccountRecord['type']>(account?.type ?? 'checking');
   const [selectedIcon, setSelectedIcon] = useState(accountIconSelection(account?.icon ?? null));
@@ -37,6 +38,18 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
         {state.message ? (
           <Alert severity={state.success ? 'success' : 'error'} role="status">{state.message}</Alert>
         ) : null}
+
+        <TextField
+          id="account-code"
+          name="code"
+          label="账户代码"
+          required
+          fullWidth
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          helperText="唯一标识，例如 ali"
+          slotProps={{ htmlInput: { maxLength: 50 } }}
+        />
 
         <TextField
           id="account-name"

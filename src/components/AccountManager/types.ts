@@ -2,6 +2,7 @@ import type { AccountActionState } from '@/app/accounts/actions';
 
 export type AccountRecord = {
   id: number;
+  code: string | null;
   name: string;
   icon: string | null;
   type: 'checking' | 'savings' | 'credit' | 'cash' | 'other';

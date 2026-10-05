@@ -10,7 +10,7 @@ import Typography from '@mui/material/Typography';
 import { setAccountArchivedAction } from '@/app/accounts/actions';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
 import { formatMinorUnits } from '@/src/lib/money';
-import { accountTypes, type AccountRecord } from './types';
+import type { AccountRecord } from './types';
 
 type AccountCardProps = {
   account: AccountRecord;
@@ -19,8 +19,6 @@ type AccountCardProps = {
 };
 
 export default function AccountCard({ account, onEdit, dragHandle }: AccountCardProps) {
-  const typeLabel = accountTypes.find((type) => type.value === account.type)?.label ?? '其他';
-
   return (
     <Card
       id={`account-${account.id}`}
@@ -57,7 +55,7 @@ export default function AccountCard({ account, onEdit, dragHandle }: AccountCard
                 </Avatar>
                 <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="h2" sx={{ overflowWrap: 'anywhere' }}>{account.name}</Typography>
-                  <Chip label={typeLabel} size="small" />
+                  <Chip label={account.code ?? `account-${account.id}`} size="small" variant="outlined" />
                   {account.isArchived ? <Chip label="已归档" size="small" color="default" /> : null}
                 </Box>
               </Box>
