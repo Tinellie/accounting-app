@@ -13,7 +13,13 @@ export default function TransactionsPage() {
 
   // Fetch account options from the database
   const accountOptions = db
-    .select({ id: accounts.id, name: accounts.name, currency: accounts.currency })
+    .select({
+      id: accounts.id,
+      name: accounts.name,
+      currency: accounts.currency,
+      type: accounts.type,
+      icon: accounts.icon,
+    })
     .from(accounts)
     .where(eq(accounts.isArchived, false))
     .orderBy(asc(accounts.name))
@@ -21,7 +27,15 @@ export default function TransactionsPage() {
 
   // Fetch category options from the database
   const categoryOptions = db
-    .select({ id: categories.id, name: categories.name, type: categories.type })
+    .select({
+      id: categories.id,
+      name: categories.name,
+      type: categories.type,
+      parentId: categories.parentId,
+      sortOrder: categories.sortOrder,
+      icon: categories.icon,
+      color: categories.color,
+    })
     .from(categories)
     .orderBy(asc(categories.sortOrder), asc(categories.name)) 
     .all();
