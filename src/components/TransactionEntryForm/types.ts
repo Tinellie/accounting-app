@@ -2,6 +2,7 @@ export type TransactionType = 'expense' | 'income' | 'transfer';
 
 export type AccountOption = {
   id: number;
+  code: string | null;
   name: string;
   currency: string;
   type: 'checking' | 'savings' | 'credit' | 'cash' | 'other';
@@ -10,6 +11,7 @@ export type AccountOption = {
 
 export type CategoryOption = {
   id: number;
+  code: string | null;
   name: string;
   type: 'expense' | 'income';
   parentId: number | null;

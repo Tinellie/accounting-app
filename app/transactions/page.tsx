@@ -15,6 +15,7 @@ export default function TransactionsPage() {
   const accountOptions = db
     .select({
       id: accounts.id,
+      code: accounts.code,
       name: accounts.name,
       currency: accounts.currency,
       type: accounts.type,
@@ -29,6 +30,7 @@ export default function TransactionsPage() {
   const categoryOptions = db
     .select({
       id: categories.id,
+      code: categories.code,
       name: categories.name,
       type: categories.type,
       parentId: categories.parentId,
