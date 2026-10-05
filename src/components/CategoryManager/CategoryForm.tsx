@@ -28,6 +28,7 @@ type CategoryFormProps = {
 export default function CategoryForm({ category, categories, iconNames, onCancel }: CategoryFormProps) {
   const action = category ? updateCategoryAction : createCategoryAction;
   const [state, formAction, isPending] = useActionState(action, initialActionState);
+  const [code, setCode] = useState(category ? category.code ?? `category-${category.id}` : '');
   const [type, setType] = useState<CategoryRecord['type']>(category?.type ?? 'expense');
   const [parentId, setParentId] = useState(String(category?.parentId ?? ''));
   const [icon, setIcon] = useState(normalizeCategoryIconName(category?.icon ?? null) ?? '');
@@ -50,6 +51,18 @@ export default function CategoryForm({ category, categories, iconNames, onCancel
         {state.message ? (
           <Alert severity={state.success ? 'success' : 'error'} role="status">{state.message}</Alert>
         ) : null}
+
+        <TextField
+          id="category-code"
+          name="code"
+          label="分类代码"
+          required
+          fullWidth
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          helperText="唯一标识，例如 food"
+          slotProps={{ htmlInput: { maxLength: 50 } }}
+        />
 
         <TextField
           id="category-name"

@@ -2,6 +2,7 @@ import type { CategoryActionState } from '@/app/categories/actions';
 
 export type CategoryRecord = {
   id: number;
+  code: string | null;
   name: string;
   type: 'expense' | 'income';
   parentId: number | null;

@@ -22,6 +22,7 @@ export const categories = sqliteTable(
   'categories',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
+    code: text('code'),
     name: text('name').notNull(),
     type: text('type', { enum: ['expense', 'income'] }).notNull(),
     parentId: integer('parent_id').references((): AnySQLiteColumn => categories.id, { onDelete: 'cascade' }),
@@ -29,6 +30,7 @@ export const categories = sqliteTable(
     color: text('color'),
     sortOrder: integer('sort_order').notNull().default(0),
   },
+  (table) => [uniqueIndex('categories_code_unique').on(table.code)],
 );
 
 export const transactions = sqliteTable(

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, min, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/src/db";
 import { categories, transactions } from "@/src/db/schema";
@@ -21,6 +21,7 @@ export async function createCategoryAction(
   formData: FormData,
 ): Promise<CategoryActionState> {
   const parsed = createCategorySchema.safeParse({
+    code: formData.get("code"),
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
@@ -32,6 +33,12 @@ export async function createCategoryAction(
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message ?? "请检查分类信息" };
   }
+
+  const duplicateCode = db.select({ id: categories.id })
+    .from(categories)
+    .where(eq(categories.code, parsed.data.code))
+    .get();
+  if (duplicateCode) return { success: false, message: "分类代码已被使用" };
 
   try {
     db.transaction((tx) => {
@@ -49,13 +56,11 @@ export async function createCategoryAction(
       const siblingFilter = parsed.data.parentId === null
         ? and(eq(categories.type, parsed.data.type), isNull(categories.parentId))
         : eq(categories.parentId, parsed.data.parentId);
-      const lastSibling = tx.select({ sortOrder: categories.sortOrder })
+      const firstSibling = tx.select({ sortOrder: min(categories.sortOrder) })
         .from(categories)
         .where(siblingFilter)
-        .orderBy(desc(categories.sortOrder))
-        .limit(1)
         .get();
-      const sortOrder = (lastSibling?.sortOrder ?? -1) + 1;
+      const sortOrder = (firstSibling?.sortOrder ?? 1) - 1;
 
       const color = parsed.data.parentId === null && parsed.data.color === null
         ? chooseCategoryColor(
@@ -88,6 +93,7 @@ export async function updateCategoryAction(
 ): Promise<CategoryActionState> {
   const parsed = updateCategorySchema.safeParse({
     id: formData.get("id"),
+    code: formData.get("code"),
     name: formData.get("name"),
     type: formData.get("type"),
     parentId: formData.get("parentId"),
@@ -101,6 +107,11 @@ export async function updateCategoryAction(
   }
 
   const categoryInput = parsed.data;
+  const duplicateCode = db.select({ id: categories.id })
+    .from(categories)
+    .where(and(eq(categories.code, categoryInput.code), ne(categories.id, categoryInput.id)))
+    .get();
+  if (duplicateCode) return { success: false, message: "分类代码已被使用" };
 
   try {
     db.transaction((tx) => {
@@ -164,6 +175,7 @@ export async function updateCategoryAction(
 
       tx.update(categories)
         .set({
+          code: categoryInput.code,
           name: categoryInput.name,
           type: categoryInput.type,
           parentId: categoryInput.parentId,

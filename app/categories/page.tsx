@@ -10,6 +10,7 @@ export default function CategoriesPage() {
   const categoryRows = db
     .select({
       id: categories.id,
+      code: categories.code,
       name: categories.name,
       type: categories.type,
       parentId: categories.parentId,

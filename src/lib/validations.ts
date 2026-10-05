@@ -56,6 +56,9 @@ export const updateAccountSchema = z.object({
 });
 
 export const createCategorySchema = z.object({
+  code: str
+    .regex(/^[A-Za-z0-9_-]{1,50}$/, "分类代码只能包含英文字母、数字、连字符和下划线")
+    .transform((value) => value.toLowerCase()),
   name: nameSchema,
   type: z.enum(["expense", "income"]),
   parentId: nullableIdSchema,
