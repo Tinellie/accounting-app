@@ -1,4 +1,4 @@
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -30,6 +30,10 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
   const [name, setName] = useState(account?.name ?? '');
   const [type, setType] = useState<AccountRecord['type']>(account?.type ?? 'checking');
   const [selectedIcon, setSelectedIcon] = useState(accountIconSelection(account?.icon ?? null));
+
+  useEffect(() => {
+    if (state.success) onCancel();
+  }, [state.success, onCancel]);
 
   return (
     <Box component="form" action={formAction} sx={{ pt: 1 }}>

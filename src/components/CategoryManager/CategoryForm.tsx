@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -40,6 +40,10 @@ export default function CategoryForm({ category, categories, iconNames, onCancel
   const parentColor = selectedParent
     ? selectedParent.color ?? fallbackCategoryColor(selectedParent.id)
     : null;
+
+  useEffect(() => {
+    if (state.success) onCancel();
+  }, [state.success, onCancel]);
 
   return (
     <Box component="form" action={formAction} sx={{ pt: 1 }}>

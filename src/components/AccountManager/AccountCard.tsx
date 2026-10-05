@@ -19,6 +19,12 @@ type AccountCardProps = {
 };
 
 export default function AccountCard({ account, onEdit, dragHandle }: AccountCardProps) {
+  const balanceColor = account.balance > 0
+    ? 'success.main'
+    : account.balance < 0
+      ? 'error.main'
+      : 'text.secondary';
+
   return (
     <Card
       id={`account-${account.id}`}
@@ -61,10 +67,48 @@ export default function AccountCard({ account, onEdit, dragHandle }: AccountCard
               </Box>
 
               <Box>
-                <Typography variant="caption" color="text.secondary">当前余额</Typography>
-                <Typography variant="h2" sx={{ fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
-                  {account.currency} {formatMinorUnits(account.balance)}
-                </Typography>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
+                    gap: 0,
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    pl: { xs: 0, sm: 2 },
+                    borderLeft: { xs: 0, sm: 1 },
+                    borderColor: 'divider',
+                    color: balanceColor,
+                    textAlign: 'right',
+                  }}
+                >
+                  <Typography component="span" variant="caption" sx={{ 
+                    color: 'inherit', 
+                    fontSize: '0.875rem', 
+                    fontWeight: 600, 
+                    lineHeight: 1, 
+                    opacity: 0.72, 
+                    fontVariantNumeric: 'tabular-nums' 
+                    }}>
+                    {account.currency}
+                  </Typography>
+                  <Typography
+                    component="span"
+                    variant="h2"
+                    sx={{ 
+                      fontFamily: '"Segoe UI", sans-serif', 
+                      fontSize: '2.125rem', 
+                      fontWeight: 500, 
+                      lineHeight: 1, 
+                      color: 'inherit', 
+                      fontVariantNumeric: 'tabular-nums', 
+                      overflowWrap: 'anywhere' 
+                    }}
+                  >
+                    {formatMinorUnits(account.balance)}
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           </Box>
