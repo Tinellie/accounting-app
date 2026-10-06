@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -31,6 +31,10 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
   const [occurredAt, setOccurredAt] = useState('');
   const [state, formAction, isPending] = useActionState(createTransactionAction, initialActionState);
   const filteredCategories = categories.filter((category) => category.type === type);
+
+  useEffect(() => {
+    startTransition(() => setOccurredAt(new Date().toISOString()));
+  }, [setOccurredAt]);
 
   function changeType(nextType: TransactionType) {
     setType(nextType);

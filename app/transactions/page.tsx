@@ -8,6 +8,7 @@ import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
 
 const destinationAccounts = alias(accounts, "destination_accounts");
+const parentCategories = alias(categories, "parent_categories");
 
 export default function TransactionsPage() {
 
@@ -52,12 +53,18 @@ export default function TransactionsPage() {
       notes: transactions.notes,
       accountName: accounts.name,
       currency: accounts.currency,
+      categoryId: transactions.categoryId,
       categoryName: categories.name,
+      categoryIcon: categories.icon,
+      categoryColor: categories.color,
+      categoryParentId: categories.parentId,
+      categoryParentColor: parentCategories.color,
       destinationAccountName: destinationAccounts.name,
     })
     .from(transactions)
     .innerJoin(accounts, eq(transactions.accountId, accounts.id))
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(parentCategories, eq(categories.parentId, parentCategories.id))
     .leftJoin(destinationAccounts, eq(transactions.toAccountId, destinationAccounts.id))
     .orderBy(desc(transactions.occurredAt), desc(transactions.id))
     .all();

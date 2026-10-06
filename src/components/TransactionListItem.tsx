@@ -1,5 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import CategoryIcon from '@/src/components/CategoryIcon';
+import { fallbackCategoryColor } from '@/src/lib/category-colors';
 import { transactions } from '@/src/db/schema';
 import { formatMinorUnits } from '@/src/lib/money';
 
@@ -9,7 +11,12 @@ export type TransactionListItemData = Pick<
 > & {
   accountName: string;
   currency: string;
+  categoryId: number | null;
   categoryName: string | null;
+  categoryIcon: string | null;
+  categoryColor: string | null;
+  categoryParentId: number | null;
+  categoryParentColor: string | null;
   destinationAccountName: string | null;
 };
 
@@ -26,7 +33,13 @@ const transactionDisplay = {
 
 export default function TransactionListItem({ transaction }: TransactionListItemProps) {
   const display = transactionDisplay[transaction.type];
+  const isTransfer = transaction.type === 'transfer';
   const amountForDisplay = transaction.type === 'expense' ? -transaction.amount : transaction.amount;
+  const categoryColor = transaction.categoryColor ?? (
+    transaction.categoryParentId === null
+      ? transaction.categoryId === null ? null : fallbackCategoryColor(transaction.categoryId)
+      : transaction.categoryParentColor ?? fallbackCategoryColor(transaction.categoryParentId)
+  );
   const sign = transaction.type === 'transfer' || transaction.type === 'adjustment'
     ? transaction.amount < 0 ? '−' : ''
     : amountForDisplay < 0 ? '−' : amountForDisplay > 0 ? '+' : '';
@@ -37,18 +50,47 @@ export default function TransactionListItem({ transaction }: TransactionListItem
       sx={{
         display: 'grid',
         gridTemplateColumns: {
-          xs: 'minmax(0, 1fr) minmax(110px, 40%)',
-          md: 'minmax(0, 1.1fr) minmax(0, 1fr) minmax(160px, auto)',
+          xs: '32px minmax(0, 1fr) minmax(110px, 40%)',
+          md: '32px minmax(0, 1.1fr) minmax(0, 1fr) minmax(160px, auto)',
         },
         alignItems: 'center',
-        gap: { xs: 1.5, md: 3 },
+        columnGap: { xs: 0.75, md: 1.25 },
+        rowGap: { xs: 1.5, md: 3 },
         py: 2,
       }}
     >
-      <Box sx={{ minWidth: 0, gridColumn: 1 }}>
+      {transaction.categoryName || isTransfer ? (
+        <Box
+          aria-hidden="true"
+          sx={{
+            gridColumn: 1,
+            gridRow: { xs: '1 / span 2', md: 1 },
+            alignSelf: 'center',
+            justifySelf: 'center',
+            display: 'grid',
+            placeItems: 'center',
+            width: 32,
+            height: 32,
+            borderRadius: 1,
+            bgcolor: isTransfer ? 'rgba(2, 136, 209, 0.1)' : categoryColor ? `${categoryColor}1A` : 'action.hover',
+          }}
+        >
+          <CategoryIcon
+            name={isTransfer ? 'SwapHoriz' : transaction.categoryIcon ?? 'Category'}
+            color={isTransfer ? 'info.main' : categoryColor ?? 'action'}
+            fontSize="medium"
+          />
+        </Box>
+      ) : <Box sx={{ gridColumn: 1, gridRow: { xs: '1 / span 2', md: 1 } }} />}
+      <Box sx={{ minWidth: 0, gridColumn: 2 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {display.label}
-          {transaction.categoryName ? ` · ${transaction.categoryName}` : ' · 未分类'}
+          {transaction.categoryName ? (
+            <>
+              {' · '}
+              {transaction.categoryName}
+            </>
+          ) : ' · 未分类'}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(transaction.occurredAt)}
@@ -59,7 +101,7 @@ export default function TransactionListItem({ transaction }: TransactionListItem
           variant="caption"
           color="text.secondary"
           sx={{
-            gridColumn: { xs: '1 / -1', md: 2 },
+            gridColumn: { xs: '2 / -1', md: 3 },
             gridRow: { xs: 3, md: 1 },
             display: { xs: 'none', md: 'block' },
             minWidth: 0,
@@ -73,7 +115,7 @@ export default function TransactionListItem({ transaction }: TransactionListItem
       ) : null}
       <Box
         sx={{
-          gridColumn: { xs: 2, md: 3 },
+          gridColumn: { xs: 3, md: 4 },
           gridRow: { xs: '1 / span 2', md: 1 },
           justifySelf: 'end',
           display: 'flex',
