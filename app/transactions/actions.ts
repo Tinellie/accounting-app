@@ -1,10 +1,54 @@
 "use server";
 
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
-import { createTransactionSchema } from "@/src/lib/validations";
+import { toMinorUnits } from "@/src/lib/money";
+import { createTransactionSchema, positiveIdSchema } from "@/src/lib/validations";
+
+const execFileAsync = promisify(execFile);
+const maxImportImageBytes = 5 * 1024 * 1024;
+const allowedImageTypes: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+export type OcrImportRow = {
+  description: string | null;
+  occurredAt: string | null;
+  amount: string | null;
+  balance: string | null;
+  ocrText: string | null;
+};
+
+export type OcrImportPreviewResult =
+  | { success: true; rows: OcrImportRow[] }
+  | { success: false; message: string };
+
+const importedTransactionSchema = z.object({
+  amount: z.string().trim().regex(/^[+-]?\d+(?:\.\d{1,2})?$/, "交易金额无效"),
+  occurredAt: z.coerce.date(),
+  description: z.string().trim().max(1000, "交易说明不能超过 1000 个字符"),
+  categoryId: positiveIdSchema,
+});
+
+const saveImportedTransactionsSchema = z.object({
+  accountId: positiveIdSchema,
+  rows: z.array(importedTransactionSchema).min(1, "没有可保存的交易").max(200, "一次最多保存 200 笔交易"),
+});
+
+export type SaveImportedTransactionsResult = {
+  success: boolean;
+  message: string;
+};
 
 type TransactionActionState = {
   success: boolean;
@@ -119,4 +163,166 @@ export async function createTransactionAction(
   revalidatePath("/accounts");
 
   return { success: true, message: "交易已保存" };
+}
+
+export async function previewTransactionImportAction(formData: FormData): Promise<OcrImportPreviewResult> {
+  const uploadedFile = formData.get("screenshot");
+
+  if (!(uploadedFile instanceof File)) {
+    return { success: false, message: "请选择微信账单截图" };
+  }
+
+  const extension = allowedImageTypes[uploadedFile.type];
+  if (!extension) {
+    return { success: false, message: "仅支持 JPG、PNG 或 WebP 图片" };
+  }
+
+  if (uploadedFile.size === 0 || uploadedFile.size > maxImportImageBytes) {
+    return { success: false, message: "截图不能为空，且大小不能超过 5 MB" };
+  }
+
+  let temporaryDirectory: string | undefined;
+
+  try {
+    temporaryDirectory = await mkdtemp(join(tmpdir(), "accounting-ocr-"));
+    const inputPath = join(temporaryDirectory, `screenshot${extension}`);
+    const outputPath = join(temporaryDirectory, "result.json");
+    const cropsPath = join(temporaryDirectory, "crops");
+    const scriptPath = join(process.cwd(), "scripts", "crop_transaction_screenshot.py");
+    const pythonExecutable = process.env.OCR_PYTHON_EXECUTABLE ?? (
+      process.platform === "win32" ? "python" : "python3"
+    );
+
+    await writeFile(inputPath, Buffer.from(await uploadedFile.arrayBuffer()));
+    await execFileAsync(
+      pythonExecutable,
+      [scriptPath, "--input", inputPath, "--output", outputPath, "--crops-dir", cropsPath],
+      { timeout: 180_000, maxBuffer: 1024 * 1024 },
+    );
+
+    const result = JSON.parse(await readFile(outputPath, "utf8")) as { segments?: unknown };
+    if (!Array.isArray(result.segments)) {
+      return { success: false, message: "OCR 未返回可预览的交易数据" };
+    }
+
+    const rows: OcrImportRow[] = result.segments.flatMap((segment: unknown) => {
+      if (!segment || typeof segment !== "object") return [];
+      const entry = segment as { type?: unknown; ocrText?: unknown; data?: unknown };
+      if (entry.type !== "transaction" || !entry.data || typeof entry.data !== "object") return [];
+      const data = entry.data as Record<string, unknown>;
+
+      return [{
+        description: typeof data.description === "string" ? data.description : null,
+        occurredAt: typeof data.dateTime === "string" ? data.dateTime : null,
+        amount: typeof data.amount === "string" ? data.amount : null,
+        balance: typeof data.balance === "string" ? data.balance : null,
+        ocrText: typeof entry.ocrText === "string" ? entry.ocrText : null,
+      }];
+    });
+
+    if (rows.length === 0) {
+      return { success: false, message: "没有从截图中识别到交易，请检查图片内容" };
+    }
+
+    return { success: true, rows };
+  } catch {
+    return { success: false, message: "截图识别失败，请确认图片清晰且服务器已配置 OCR 运行环境" };
+  } finally {
+    if (temporaryDirectory) {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  }
+}
+
+export async function saveImportedTransactionsAction(
+  input: unknown,
+): Promise<SaveImportedTransactionsResult> {
+  const parsed = saveImportedTransactionsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "导入数据无效" };
+  }
+
+  const preparedRows: {
+    type: "expense" | "income";
+    amount: number;
+    occurredAt: Date;
+    description: string;
+    categoryId: number;
+  }[] = [];
+  for (const row of parsed.data.rows) {
+    let signedAmount: number;
+    try {
+      signedAmount = toMinorUnits(row.amount.startsWith("+") ? row.amount.slice(1) : row.amount);
+    } catch {
+      return { success: false, message: "存在无效或超出范围的交易金额" };
+    }
+
+    if (signedAmount === 0) {
+      return { success: false, message: "交易金额不能为 0" };
+    }
+
+    preparedRows.push({
+      type: signedAmount < 0 ? "expense" as const : "income" as const,
+      amount: Math.abs(signedAmount),
+      occurredAt: row.occurredAt,
+      description: row.description,
+      categoryId: row.categoryId,
+    });
+  }
+
+  try {
+    db.transaction((tx) => {
+      const sourceAccount = tx
+        .select({ id: accounts.id, isArchived: accounts.isArchived })
+        .from(accounts)
+        .where(eq(accounts.id, parsed.data.accountId))
+        .get();
+
+      if (!sourceAccount || sourceAccount.isArchived) {
+        throw new TransactionActionError("所选账户不存在或已归档");
+      }
+
+      for (const row of preparedRows) {
+        const category = tx
+          .select({ type: categories.type })
+          .from(categories)
+          .where(eq(categories.id, row.categoryId))
+          .get();
+
+        if (!category || category.type !== row.type) {
+          throw new TransactionActionError("导入分类不存在或与交易类型不匹配");
+        }
+
+        tx.insert(transactions)
+          .values({
+            type: row.type,
+            amount: row.amount,
+            occurredAt: row.occurredAt,
+            accountId: sourceAccount.id,
+            toAccountId: null,
+            categoryId: row.categoryId,
+            notes: row.description || null,
+          })
+          .run();
+
+        const balanceDelta = row.type === "income" ? row.amount : -row.amount;
+        tx.update(accounts)
+          .set({ balance: sql`${accounts.balance} + ${balanceDelta}` })
+          .where(eq(accounts.id, sourceAccount.id))
+          .run();
+      }
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) {
+      return { success: false, message: error.message };
+    }
+
+    return { success: false, message: "批量保存交易失败，未导入任何记录" };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/");
+  revalidatePath("/accounts");
+
+  return { success: true, message: `已导入 ${preparedRows.length} 笔交易` };
 }

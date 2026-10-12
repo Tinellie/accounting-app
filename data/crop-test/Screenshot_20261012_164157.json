@@ -1,0 +1,195 @@
+{
+  "source": "data/Screenshot_20261012_164157.jpg",
+  "image": {
+    "width": 1260,
+    "height": 2392
+  },
+  "coordinateConvention": "bbox uses left/top inclusive and right/bottom exclusive",
+  "detectedHorizontalBoundaries": [
+    180,
+    428,
+    682,
+    936,
+    1190,
+    1444,
+    1622,
+    1875,
+    2129
+  ],
+  "segments": [
+    {
+      "type": "month_header",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 0,
+        "right": 1260,
+        "bottom": 179
+      },
+      "crop": "data/crop-test/crops/001-month_header-2026-09.jpg",
+      "ocrText": "2026 年 9 月 v",
+      "data": {
+        "month": "2026-09"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 181,
+        "right": 1260,
+        "bottom": 427
+      },
+      "crop": "data/crop-test/crops/002-transaction-2026-09.jpg",
+      "ocrText": "阿 元 来 了 -55.00\r\n9 月 14 日 14:00 零 钱 余 额 90.78",
+      "data": {
+        "description": "阿元来了",
+        "dateTime": "2026-09-14T14:00",
+        "amount": "-55.00",
+        "balance": "90.78"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 429,
+        "right": 1260,
+        "bottom": 681
+      },
+      "crop": "data/crop-test/crops/003-transaction-2026-09.jpg",
+      "ocrText": "港 铁 中 铁 电 化 轨 道 交 通 ( 深 … -2.00\r\n9 月 14 日 13:48 零 钱 余 额 145.78",
+      "data": {
+        "description": "港铁中铁电化轨道交通(深…",
+        "dateTime": "2026-09-14T13:48",
+        "amount": "-2.00",
+        "balance": "145.78"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 683,
+        "right": 1260,
+        "bottom": 935
+      },
+      "crop": "data/crop-test/crops/004-transaction-2026-09.jpg",
+      "ocrText": "嚣 恩 转 账 - 来 自 林 浩 培 +132.26\r\n平 9 月 12 日 21:26 零 钱 余 额 147.78",
+      "data": {
+        "description": "转账-来自林浩培",
+        "dateTime": "2026-09-12T21:26",
+        "amount": "+132.26",
+        "balance": "147.78"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 937,
+        "right": 1260,
+        "bottom": 1189
+      },
+      "crop": "data/crop-test/crops/005-transaction-2026-09.jpg",
+      "ocrText": "=] -5.00\r\n9 月 3 日 09:44 零 钱 余 额 15.52",
+      "data": {
+        "description": "美团",
+        "dateTime": "2026-09-03T09:44",
+        "amount": "-5.00",
+        "balance": "15.52"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-09",
+      "bbox": {
+        "left": 0,
+        "top": 1191,
+        "right": 1260,
+        "bottom": 1443
+      },
+      "crop": "data/crop-test/crops/006-transaction-2026-09.jpg",
+      "ocrText": "=] -50.60\r\n9 月 1 日 18:44 零 钱 余 额 20.52",
+      "data": {
+        "description": "美团",
+        "dateTime": "2026-09-01T18:44",
+        "amount": "-50.60",
+        "balance": "20.52"
+      }
+    },
+    {
+      "type": "month_header",
+      "month": "2026-08",
+      "bbox": {
+        "left": 0,
+        "top": 1445,
+        "right": 1260,
+        "bottom": 1621
+      },
+      "crop": "data/crop-test/crops/007-month_header-2026-08.jpg",
+      "ocrText": "2026 年 8 月 v",
+      "data": {
+        "month": "2026-08"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-08",
+      "bbox": {
+        "left": 0,
+        "top": 1623,
+        "right": 1260,
+        "bottom": 1874
+      },
+      "crop": "data/crop-test/crops/008-transaction-2026-08.jpg",
+      "ocrText": "E 引 51 -34.40\r\n8A31H 21:07 零 钱 余 额 71.12",
+      "data": {
+        "description": "美团",
+        "dateTime": "2026-08-31T21:07",
+        "amount": "-34.40",
+        "balance": "71.12"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-08",
+      "bbox": {
+        "left": 0,
+        "top": 1876,
+        "right": 1260,
+        "bottom": 2128
+      },
+      "crop": "data/crop-test/crops/009-transaction-2026-08.jpg",
+      "ocrText": "E 引 1 -35.70\r\n8A31H 10:50 零 钱 余 额 105.52",
+      "data": {
+        "description": "美团",
+        "dateTime": "2026-08-31T10:50",
+        "amount": "-35.70",
+        "balance": "105.52"
+      }
+    },
+    {
+      "type": "transaction",
+      "month": "2026-08",
+      "bbox": {
+        "left": 0,
+        "top": 2130,
+        "right": 1260,
+        "bottom": 2392
+      },
+      "crop": "data/crop-test/crops/010-transaction-2026-08.jpg",
+      "ocrText": "E 引 51 -31.40\r\n8 月 30 日 19:03 零 钱 余 额 141.22",
+      "data": {
+        "description": "美团",
+        "dateTime": "2026-08-30T19:03",
+        "amount": "-31.40",
+        "balance": "141.22"
+      }
+    }
+  ]
+}

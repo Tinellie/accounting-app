@@ -2,9 +2,42 @@
 
 import { createTheme } from '@mui/material/styles';
 
+type TransactionColorSet = {
+  main: string;
+  dark: string;
+  light: string;
+};
+
+const transactionColors = {
+  expense: { main: '#D32F2F', dark: '#C62828', light: '#F7ECEE' },
+  income: { main: '#2E7D32', dark: '#1B5E20', light: '#E7EEE8' },
+  transfer: { main: '#0288D1', dark: '#0277BD', light: '#E5F3FA' },
+} as const;
+
+declare module '@mui/material/styles' {
+  interface Palette {
+    transaction: {
+      expense: TransactionColorSet;
+      income: TransactionColorSet;
+      transfer: TransactionColorSet;
+    };
+  }
+
+  interface PaletteOptions {
+    transaction?: {
+      expense: TransactionColorSet;
+      income: TransactionColorSet;
+      transfer: TransactionColorSet;
+    };
+  }
+}
+
 const theme = createTheme({
   palette: {
     mode: 'light',
+    error: { main: transactionColors.expense.main },
+    success: { main: transactionColors.income.main },
+    info: { main: transactionColors.transfer.main },
     primary: {
       main: '#176B5B',
       dark: '#10483E',
@@ -23,6 +56,7 @@ const theme = createTheme({
       secondary: '#697570',
     },
     divider: '#E2E7E2',
+    transaction: transactionColors,
   },
   shape: {
     borderRadius: 8,

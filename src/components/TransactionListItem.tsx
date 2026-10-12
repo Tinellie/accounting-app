@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
 import Typography from '@mui/material/Typography';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
@@ -50,8 +51,8 @@ export default function TransactionListItem({ transaction }: TransactionListItem
       sx={{
         display: 'grid',
         gridTemplateColumns: {
-          xs: '32px minmax(0, 1fr) minmax(110px, 40%)',
-          md: '32px minmax(0, 1.1fr) minmax(0, 1fr) minmax(160px, auto)',
+          xs: '32px 32px minmax(0, 1fr) minmax(110px, 40%)',
+          md: '32px 32px minmax(0, 1.1fr) minmax(0, 1fr) minmax(160px, auto)',
         },
         alignItems: 'center',
         columnGap: { xs: 0.75, md: 1.25 },
@@ -59,11 +60,24 @@ export default function TransactionListItem({ transaction }: TransactionListItem
         py: 2,
       }}
     >
+      <Checkbox
+        size="small"
+        slotProps={{ input: { 'aria-label': `选择${display.label}记录` } }}
+        sx={{
+          gridColumn: 1,
+          gridRow: { xs: '1 / span 2', md: 1 },
+          justifySelf: 'center',
+          alignSelf: 'center',
+          width: 24,
+          height: 24,
+          p: 0,
+        }}
+      />
       {transaction.categoryName || isTransfer ? (
         <Box
           aria-hidden="true"
           sx={{
-            gridColumn: 1,
+            gridColumn: 2,
             gridRow: { xs: '1 / span 2', md: 1 },
             alignSelf: 'center',
             justifySelf: 'center',
@@ -72,17 +86,17 @@ export default function TransactionListItem({ transaction }: TransactionListItem
             width: 32,
             height: 32,
             borderRadius: 1,
-            bgcolor: isTransfer ? 'rgba(2, 136, 209, 0.1)' : categoryColor ? `${categoryColor}1A` : 'action.hover',
+            bgcolor: isTransfer ? 'transaction.transfer.light' : categoryColor ? `${categoryColor}1A` : 'action.hover',
           }}
         >
           <CategoryIcon
             name={isTransfer ? 'SwapHoriz' : transaction.categoryIcon ?? 'Category'}
-            color={isTransfer ? 'info.main' : categoryColor ?? 'action'}
+            color={isTransfer ? 'transaction.transfer.main' : categoryColor ?? 'action'}
             fontSize="medium"
           />
         </Box>
-      ) : <Box sx={{ gridColumn: 1, gridRow: { xs: '1 / span 2', md: 1 } }} />}
-      <Box sx={{ minWidth: 0, gridColumn: 2 }}>
+      ) : <Box sx={{ gridColumn: 2, gridRow: { xs: '1 / span 2', md: 1 } }} />}
+      <Box sx={{ minWidth: 0, gridColumn: 3 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {display.label}
           {transaction.categoryName ? (
@@ -101,7 +115,7 @@ export default function TransactionListItem({ transaction }: TransactionListItem
           variant="caption"
           color="text.secondary"
           sx={{
-            gridColumn: { xs: '2 / -1', md: 3 },
+            gridColumn: { xs: '3 / -1', md: 4 },
             gridRow: { xs: 3, md: 1 },
             display: { xs: 'none', md: 'block' },
             minWidth: 0,
@@ -115,7 +129,7 @@ export default function TransactionListItem({ transaction }: TransactionListItem
       ) : null}
       <Box
         sx={{
-          gridColumn: { xs: 3, md: 4 },
+          gridColumn: { xs: 4, md: 5 },
           gridRow: { xs: '1 / span 2', md: 1 },
           justifySelf: 'end',
           display: 'flex',

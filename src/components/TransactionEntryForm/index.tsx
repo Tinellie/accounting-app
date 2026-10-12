@@ -5,12 +5,14 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { createTransactionAction } from '@/app/transactions/actions';
 import SourceAccountField from './SourceAccountField';
 import TransactionAmountFields from './TransactionAmountFields';
 import TransactionDateField from './TransactionDateField';
 import TransactionDetailField from './TransactionDetailField';
+import TransactionImportActions from '@/src/components/TransactionImportActions';
 import TransactionSubmitButton from './TransactionSubmitButton';
 import TransactionTypeSelector from './TransactionTypeSelector';
 import type { CategoryOption, TransactionType, AccountOption } from './types';
@@ -36,6 +38,68 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
     startTransition(() => setOccurredAt(new Date().toISOString()));
   }, [setOccurredAt]);
 
+  useEffect(() => {
+    function handleTransactionShortcut(event: KeyboardEvent) {
+      if (event.key === 'Enter' && event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
+        const target = event.target;
+        const form = target instanceof HTMLElement ? target.closest<HTMLFormElement>('#txn-entry') : null;
+        if (!form) return;
+
+        event.preventDefault();
+        const submitButton = form.querySelector<HTMLButtonElement>('#txn-submit');
+        if (!submitButton || submitButton.disabled) return;
+
+        const formData = new FormData(form);
+        const transactionType = formData.get('type');
+        const amount = String(formData.get('amount') ?? '').trim();
+        const occurredAt = formData.get('occurredAt');
+        const accountId = Number(formData.get('accountId'));
+        const toAccountId = Number(formData.get('toAccountId'));
+        const categoryId = Number(formData.get('categoryId'));
+        const hasValidAmount = /^-?\d+(?:\.\d{1,2})?$/.test(amount) && Number(amount) > 0;
+        const hasValidDate = typeof occurredAt === 'string' && !Number.isNaN(Date.parse(occurredAt));
+        const hasValidAccount = Number.isSafeInteger(accountId) && accountId > 0;
+        const hasValidDetails = transactionType === 'transfer'
+          ? Number.isSafeInteger(toAccountId) && toAccountId > 0 && toAccountId !== accountId
+          : Number.isSafeInteger(categoryId) && categoryId > 0;
+
+        if (!hasValidAmount || !hasValidDate || !hasValidAccount || !hasValidDetails) {
+          form.reportValidity();
+          return;
+        }
+
+        if (form.reportValidity()) form.requestSubmit(submitButton);
+        return;
+      }
+
+      if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest('input:not([type="hidden"]), textarea, [role="combobox"], [role="textbox"], [role="spinbutton"]'))
+      ) {
+        return;
+      }
+
+      const shortcutTypes: Record<string, TransactionType> = {
+        e: 'expense',
+        i: 'income',
+        t: 'transfer',
+      };
+      const nextType = shortcutTypes[event.key.toLowerCase()];
+      if (!nextType) return;
+
+      event.preventDefault();
+      setType(nextType);
+      setCategoryId('');
+      setDestinationAccountId('');
+    }
+
+    document.addEventListener('keydown', handleTransactionShortcut);
+    return () => document.removeEventListener('keydown', handleTransactionShortcut);
+  }, []);
+
   function changeType(nextType: TransactionType) {
     setType(nextType);
     setCategoryId('');
@@ -43,8 +107,20 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
   }
 
   return (
-    <Paper id="txn-form" component="section" variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderColor: 'divider' }}>
-      <Stack className="txn-form-content" spacing={2.5}>
+    <Stack spacing={2.5}>
+      <TransactionImportActions accounts={accounts} categories={categories} />
+      <Paper
+        id="txn-form"
+        component="section"
+        variant="outlined"
+        sx={(theme) => ({
+          p: { xs: 2, md: 3 },
+          borderColor: 'divider',
+          backgroundColor: type === 'expense' ? theme.palette.background.paper : theme.palette.transaction[type].light,
+          transition: theme.transitions.create('background-color'),
+        })}
+      >
+        <Stack className="txn-form-content" spacing={2.5}>
         {/* 表单标题 */}
         <Typography id="txn-form-title" component="h2" variant="h2">记一笔</Typography>
 
@@ -75,36 +151,75 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
                 gap: 2,
               }}
             >
-              {/* 选择交易发生时间 */}
-              <TransactionDateField occurredAt={occurredAt} onDateChange={setOccurredAt} />
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <TransactionDateField occurredAt={occurredAt} onDateChange={setOccurredAt} />
+              </Box>
 
-              {/* 选择来源账户 */}
-              <SourceAccountField
-                accounts={accounts}
-                type={type}
-                sourceAccountId={sourceAccountId}
-                onAccountChange={setSourceAccountId}
+              <Box
+                id="txn-account-row"
+                sx={{
+                  gridColumn: '1 / -1',
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'minmax(0, 1fr)',
+                    sm: type === 'transfer' ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
+                  },
+                  gap: 2,
+                }}
+              >
+                <SourceAccountField
+                  accounts={accounts}
+                  type={type}
+                  sourceAccountId={sourceAccountId}
+                  onAccountChange={setSourceAccountId}
+                />
+                {type === 'transfer' ? (
+                  <TransactionDetailField
+                    type={type}
+                    accounts={accounts}
+                    categories={filteredCategories}
+                    sourceAccountId={sourceAccountId}
+                    categoryId={categoryId}
+                    destinationAccountId={destinationAccountId}
+                    onCategoryChange={setCategoryId}
+                    onDestinationChange={setDestinationAccountId}
+                  />
+                ) : null}
+              </Box>
+
+              {type !== 'transfer' ? (
+                <TransactionDetailField
+                  type={type}
+                  accounts={accounts}
+                  categories={filteredCategories}
+                  sourceAccountId={sourceAccountId}
+                  categoryId={categoryId}
+                  destinationAccountId={destinationAccountId}
+                  onCategoryChange={setCategoryId}
+                  onDestinationChange={setDestinationAccountId}
+                />
+              ) : null}
+
+              <Box sx={{ gridColumn: type === 'transfer' ? '1 / -1' : undefined }}>
+                <TransactionAmountFields />
+              </Box>
+
+              <TextField
+                id="txn-notes"
+                name="notes"
+                label="备注"
+                fullWidth
+                size="small"
+                multiline
+                minRows={3}
+                sx={{ gridColumn: '1 / -1' }}
               />
-
-              {/* 转账时选择转入账户，其他类型选择交易分类 */}
-              <TransactionDetailField
-                type={type}
-                accounts={accounts}
-                categories={filteredCategories}
-                sourceAccountId={sourceAccountId}
-                categoryId={categoryId}
-                destinationAccountId={destinationAccountId}
-                onCategoryChange={setCategoryId}
-                onDestinationChange={setDestinationAccountId}
-              />
-
-              {/* 输入交易金额和备注 */}
-              <TransactionAmountFields />
             </Box>
 
             {/* 提交交易记录 */}
             <TransactionSubmitButton
               isPending={isPending}
+              type={type}
               disabled={
                 isPending ||
                 accounts.length === 0 ||
@@ -113,7 +228,8 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
             />
           </Stack>
         </Box>
-      </Stack>
-    </Paper>
+        </Stack>
+      </Paper>
+    </Stack>
   );
 }

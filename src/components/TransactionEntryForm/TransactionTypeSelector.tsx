@@ -9,9 +9,9 @@ type TransactionTypeSelectorProps = {
 };
 
 const transactionTypes: { value: TransactionType; label: string }[] = [
-  { value: 'expense', label: '支出' },
-  { value: 'income', label: '收入' },
-  { value: 'transfer', label: '转账' },
+  { value: 'expense', label: '支出 (e)' },
+  { value: 'income', label: '收入 (i)' },
+  { value: 'transfer', label: '转账 (t)' },
 ];
 
 // 提供交易类型切换，并将当前类型放入表单数据。
@@ -27,9 +27,32 @@ export default function TransactionTypeSelector({ type, onTypeChange }: Transact
         }}
         aria-label="交易类型"
         size="small"
+        sx={(theme) => ({
+          '& .txn-type-option': {
+            transition: theme.transitions.create(['background-color', 'border-color', 'color']),
+          },
+        })}
       >
         {transactionTypes.map((transactionType) => (
-          <ToggleButton className="txn-type-option" key={transactionType.value} value={transactionType.value}>
+          <ToggleButton
+            className="txn-type-option"
+            key={transactionType.value}
+            value={transactionType.value}
+            sx={(theme) => {
+              const colors = theme.palette.transaction[transactionType.value];
+              return {
+                '&:hover': {
+                  backgroundColor: colors.light,
+                  color: colors.dark,
+                },
+                '&.Mui-selected, &.Mui-selected:hover': {
+                  backgroundColor: colors.main,
+                  borderColor: colors.main,
+                  color: theme.palette.getContrastText(colors.main),
+                },
+              };
+            }}
+          >
             {transactionType.label}
           </ToggleButton>
         ))}

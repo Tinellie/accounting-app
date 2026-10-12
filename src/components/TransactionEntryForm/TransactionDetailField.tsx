@@ -242,7 +242,7 @@ export default function TransactionDetailField({
               <TextField
                 {...params}
                 label="分类"
-                placeholder="输入分类代码或名称"
+                placeholder={categories.length === 0 ? '请先创建对应类型的分类' : '输入分类代码或名称'}
                 required
                 slotProps={{
                   ...params.slotProps,
@@ -270,9 +270,6 @@ export default function TransactionDetailField({
               />
             )}
           />
-          {categories.length === 0 ? (
-            <FormHelperText id="txn-category-hint">请先创建对应类型的分类</FormHelperText>
-          ) : null}
         </>
       )}
     </>
