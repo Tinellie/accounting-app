@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { buildCategoryTree, classifyTransactions } from "@/scripts/lib/deepseek-category-classifier.mjs";
 import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
 import { toMinorUnits } from "@/src/lib/money";
@@ -22,15 +23,22 @@ const allowedImageTypes: Record<string, string> = {
 };
 
 export type OcrImportRow = {
+  id: number;
   description: string | null;
   occurredAt: string | null;
   amount: string | null;
   balance: string | null;
   ocrText: string | null;
+  categoryId: number | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+  categoryPath: string | null;
+  categoryConfidence: number | null;
+  categoryReason: string | null;
 };
 
 export type OcrImportPreviewResult =
-  | { success: true; rows: OcrImportRow[] }
+  | { success: true; rows: OcrImportRow[]; classificationWarning?: string }
   | { success: false; message: string };
 
 const importedTransactionSchema = z.object({
@@ -205,6 +213,7 @@ export async function previewTransactionImportAction(formData: FormData): Promis
       return { success: false, message: "OCR 未返回可预览的交易数据" };
     }
 
+    let transactionIndex = 0;
     const rows: OcrImportRow[] = result.segments.flatMap((segment: unknown) => {
       if (!segment || typeof segment !== "object") return [];
       const entry = segment as { type?: unknown; ocrText?: unknown; data?: unknown };
@@ -212,11 +221,18 @@ export async function previewTransactionImportAction(formData: FormData): Promis
       const data = entry.data as Record<string, unknown>;
 
       return [{
+        id: ++transactionIndex,
         description: typeof data.description === "string" ? data.description : null,
         occurredAt: typeof data.dateTime === "string" ? data.dateTime : null,
         amount: typeof data.amount === "string" ? data.amount : null,
         balance: typeof data.balance === "string" ? data.balance : null,
         ocrText: typeof entry.ocrText === "string" ? entry.ocrText : null,
+        categoryId: null,
+        categoryCode: null,
+        categoryName: null,
+        categoryPath: null,
+        categoryConfidence: null,
+        categoryReason: null,
       }];
     });
 
@@ -224,7 +240,86 @@ export async function previewTransactionImportAction(formData: FormData): Promis
       return { success: false, message: "没有从截图中识别到交易，请检查图片内容" };
     }
 
-    return { success: true, rows };
+    const categoryRows = db
+      .select({
+        id: categories.id,
+        code: categories.code,
+        name: categories.name,
+        type: categories.type,
+        parentId: categories.parentId,
+        sortOrder: categories.sortOrder,
+      })
+      .from(categories)
+      .orderBy(asc(categories.sortOrder), asc(categories.name))
+      .all();
+    const categoryTree = buildCategoryTree(categoryRows);
+    const classifiableRows = rows.filter(
+      (row): row is OcrImportRow & { description: string } => Boolean(row.description?.trim()),
+    );
+    const warnings: string[] = [];
+
+    if (classifiableRows.length < rows.length) {
+      warnings.push(`${rows.length - classifiableRows.length} 笔交易没有识别到 Description`);
+    }
+
+    if (classifiableRows.length > 0) {
+      try {
+        const predictions = await classifyTransactions({
+          transactions: classifiableRows.map(({ id, description }) => ({ id, description })),
+          categoryTree,
+          apiKey: process.env.DEEPSEEK_API_KEY,
+        }) as {
+          id: number;
+          categoryId: number;
+          categoryCode: string;
+          categoryName: string;
+          categoryType: "expense" | "income";
+          categoryPath: string;
+          confidence: number;
+          reason: string;
+        }[];
+        const predictionsById = new Map(predictions.map((prediction) => [prediction.id, prediction]));
+        let mismatchedTypes = 0;
+
+        for (const row of rows) {
+          const prediction = predictionsById.get(row.id);
+          if (!prediction) continue;
+
+          const signedAmount = row.amount === null ? Number.NaN : Number(row.amount);
+          const transactionType = signedAmount < 0 ? "expense" : signedAmount > 0 ? "income" : null;
+          if (!transactionType || transactionType !== prediction.categoryType) {
+            mismatchedTypes += 1;
+            continue;
+          }
+
+          row.categoryId = prediction.categoryId;
+          row.categoryCode = prediction.categoryCode;
+          row.categoryName = prediction.categoryName;
+          row.categoryPath = prediction.categoryPath;
+          row.categoryConfidence = prediction.confidence;
+          row.categoryReason = prediction.reason;
+        }
+
+        if (mismatchedTypes > 0) {
+          warnings.push(`${mismatchedTypes} 笔分类建议与金额方向不符，请手动选择分类`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "";
+        if (errorMessage.includes("DEEPSEEK_API_KEY")) {
+          warnings.push("Description 已识别，但服务器未配置 DEEPSEEK_API_KEY；配置后重启应用即可自动分类，也可先手动选择分类");
+        } else {
+          warnings.push("Description 已识别，但 DeepSeek 请求失败；请检查 API 配置和网络后重试，或手动选择分类");
+        }
+      }
+    } else {
+      warnings.push("没有可发送给 DeepSeek 的 Description，请手动选择分类");
+    }
+
+    return {
+      success: true,
+      rows,
+      classificationWarning: warnings.length > 0 ? warnings.join("；") : undefined,
+    };
   } catch {
     return { success: false, message: "截图识别失败，请确认图片清晰且服务器已配置 OCR 运行环境" };
   } finally {

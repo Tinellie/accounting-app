@@ -101,6 +101,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
   const [previewRows, setPreviewRows] = useState<PreviewTransaction[]>([]);
   const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
   const [errorMessage, setErrorMessage] = useState('');
+  const [warningMessage, setWarningMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isPending, startTransition] = useTransition();
   const selectedAccount = accounts.find((account) => account.id === Number(accountId));
@@ -111,6 +112,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
     setPreviewRows([]);
     setAccountId(String(accounts[0]?.id ?? ''));
     setErrorMessage('');
+    setWarningMessage('');
   }
 
   function closeDialog() {
@@ -118,12 +120,14 @@ export default function TransactionImportActions({ accounts, categories }: Trans
     setSelectedFile(null);
     setPreviewRows([]);
     setErrorMessage('');
+    setWarningMessage('');
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setSelectedFile(event.currentTarget.files?.[0] ?? null);
     setPreviewRows([]);
     setErrorMessage('');
+    setWarningMessage('');
     event.currentTarget.value = '';
   }
 
@@ -142,11 +146,8 @@ export default function TransactionImportActions({ accounts, categories }: Trans
           return;
         }
 
-        setPreviewRows(result.rows.map((row, index) => {
-          const type = getTransactionType(row.amount);
-          const category = type ? categories.find((item) => item.type === type) : undefined;
-          return { ...row, id: index + 1, categoryId: category?.id ?? null };
-        }));
+        setWarningMessage(result.classificationWarning ?? '');
+        setPreviewRows(result.rows);
       } catch {
         setErrorMessage('截图识别失败，请稍后重试');
       }
@@ -184,7 +185,21 @@ export default function TransactionImportActions({ accounts, categories }: Trans
 
   function changeRowCategory(rowId: number, categoryValue: string) {
     const categoryId = categoryValue ? Number(categoryValue) : null;
-    setPreviewRows((rows) => rows.map((row) => row.id === rowId ? { ...row, categoryId } : row));
+    const category = categories.find((item) => item.id === categoryId);
+    const parentCategory = category?.parentId === null || !category
+      ? undefined
+      : categories.find((item) => item.id === category.parentId);
+    setPreviewRows((rows) => rows.map((row) => row.id === rowId ? {
+      ...row,
+      categoryId,
+      categoryCode: category?.code ?? null,
+      categoryName: category?.name ?? null,
+      categoryPath: category
+        ? parentCategory ? `${parentCategory.name} / ${category.name}` : category.name
+        : null,
+      categoryConfidence: null,
+      categoryReason: null,
+    } : row));
   }
 
   const listItems = previewRows.map((row) => makeListItem(row, selectedAccount, categories));
@@ -253,6 +268,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
         </DialogTitle>
         <DialogContent dividers>
           {errorMessage ? <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert> : null}
+          {warningMessage ? <Alert severity="warning" sx={{ mb: 2 }}>{warningMessage}</Alert> : null}
 
           {selectedSource === 'wechat' && previewRows.length === 0 ? (
             <Stack spacing={2}>
@@ -315,7 +331,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
                 </Box>
                 {!hasMatchingCategory ? (
                   <Alert severity="warning" sx={{ mb: 1 }}>
-                    每笔交易需要选择相同类型的分类；当前账本缺少收入分类时，请先到分类管理中添加。
+                    请为每笔交易选择与收支方向匹配的分类后再确认。
                   </Alert>
                 ) : null}
                 <Stack divider={<Divider flexItem />}>
@@ -339,6 +355,11 @@ export default function TransactionImportActions({ accounts, categories }: Trans
                         {row.description ? (
                           <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, pl: 5 }}>
                             {row.description}
+                          </Typography>
+                        ) : null}
+                        {row.categoryConfidence !== null ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 5 }}>
+                            DeepSeek {Math.round(row.categoryConfidence * 100)}% · {row.categoryReason}
                           </Typography>
                         ) : null}
                         {type && matchingCategories.length > 0 ? (

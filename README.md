@@ -41,6 +41,37 @@ npm run db:push
 npm run db:studio
 ```
 
+## DeepSeek Category Suggestions
+
+The standalone CLI reads transaction descriptions from JSON, reads the current category tree from SQLite in read-only mode, and writes category suggestions to a separate JSON file. It never updates transactions or categories.
+
+The WeChat screenshot import also sends OCR-recognized descriptions and the current category tree to DeepSeek for per-transaction suggestions. The application server reads `DEEPSEEK_API_KEY` from its environment. If it is not set, OCR preview still works and each category can be selected manually. For Docker Compose, set the variable in the shell or the ignored `.env` file before starting the app.
+
+Input format (`id` can be a string or safe integer; descriptions must be 1-2000 characters):
+
+```json
+{
+	"transactions": [
+		{ "id": "txn-001", "description": "地铁公交出行扣款" },
+		{ "id": "txn-002", "description": "每月工资到账" }
+	]
+}
+```
+
+See [scripts/examples/deepseek-transactions.json](scripts/examples/deepseek-transactions.json) for a complete sample. Set the API key in the current PowerShell session without placing it in command history, then run the classifier:
+
+```powershell
+$secureKey = Read-Host "DeepSeek API key" -AsSecureString
+$credential = New-Object System.Net.NetworkCredential('', $secureKey)
+$env:DEEPSEEK_API_KEY = $credential.Password
+npm.cmd run deepseek:classify -- --input scripts/examples/deepseek-transactions.json --output data/deepseek-category-predictions.json --batch-size 20
+Remove-Item Env:DEEPSEEK_API_KEY
+```
+
+Use `node scripts/deepseek-classify.mjs --help` to see all options. The CLI defaults to `deepseek-chat`, `DATABASE_URL` (or `data/accounting.db`), and batches of 20 transactions. The output contains each original ID and description, predicted category ID/code/name/type/path, confidence, and a short reason, along with the category tree used for review. Model results are checked against the database tree; unknown category IDs/codes or incomplete responses fail instead of being silently accepted.
+
+Run the offline tests with `npm run test:deepseek`.
+
 ## Basic Data Model (MVP)
 
 The schema includes the following core tables:

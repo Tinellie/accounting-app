@@ -6,6 +6,7 @@ services:
     environment:
       DATABASE_URL: /app/data/app.db
       NODE_ENV: production
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - sqlite_data:/app/data
       - ./data/icons-preset:/app/data/icons-preset:ro
