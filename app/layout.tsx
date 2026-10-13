@@ -10,6 +10,10 @@ import AppNavigation from "@/src/components/AppNavigation";
 import NextLink from "@/src/components/NextLink";
 import theme from "@/src/theme/theme";
 
+/**
+ * 组件：个人账本全局布局
+ * 功能：为各页面提供统一的品牌区域、主导航和内容框架。
+ */
 export const metadata: Metadata = {
   title: "个人账本",
   description: "个人收支与账户管理",

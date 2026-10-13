@@ -1,13 +1,5 @@
 import { useActionState, useEffect, useState } from 'react';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
+import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Stack, TextField } from '@mui/material';
 import {
   createAccountAction,
   updateAccountAction,
@@ -17,6 +9,11 @@ import { accountIconSelection } from '@/src/lib/account-icon-url';
 import AccountIconPicker from './AccountIconPicker';
 import { accountTypes, initialActionState, type AccountRecord } from './types';
 
+/**
+ * 组件：账户表单
+ * 功能：供用户新增或修改账户名称、代码、类型、图标及初始信息。
+ * 保存后会返回账户管理列表。
+ */
 type AccountFormProps = {
   account: AccountRecord | null;
   icons: string[];
@@ -24,12 +21,17 @@ type AccountFormProps = {
 };
 
 export default function AccountForm({ account, icons, onCancel }: AccountFormProps) {
+  // 根据是否已有账户选择新增或更新操作。
   const action = account ? updateAccountAction : createAccountAction;
+  // 服务端保存结果、提交函数和当前是否正在保存。
   const [state, formAction, isPending] = useActionState<AccountActionState, FormData>(action, initialActionState);
-  const [code, setCode] = useState(account ? account.code ?? `account-${account.id}` : '');
-  const [name, setName] = useState(account?.name ?? '');
-  const [type, setType] = useState<AccountRecord['type']>(account?.type ?? 'checking');
-  const [selectedIcon, setSelectedIcon] = useState(accountIconSelection(account?.icon ?? null));
+  // code 是账户唯一代码，name 是显示名称，type 是账户类别，icon 是所选图标。
+  const [formValues, setFormValues] = useState(() => ({
+    code: account ? account.code ?? `account-${account.id}` : '',
+    name: account?.name ?? '',
+    type: account?.type ?? 'checking' as AccountRecord['type'],
+    icon: accountIconSelection(account?.icon ?? null),
+  }));
 
   useEffect(() => {
     if (state.success) onCancel();
@@ -49,8 +51,8 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
           label="账户代码"
           required
           fullWidth
-          value={code}
-          onChange={(event) => setCode(event.target.value)}
+          value={formValues.code}
+          onChange={(event) => setFormValues((current) => ({ ...current, code: event.target.value }))}
           helperText="唯一标识，例如 ali"
           slotProps={{ htmlInput: { maxLength: 50 } }}
         />
@@ -61,8 +63,8 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
           label="账户名称"
           required
           fullWidth
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          value={formValues.name}
+          onChange={(event) => setFormValues((current) => ({ ...current, name: event.target.value }))}
         />
 
         <FormControl fullWidth required>
@@ -72,8 +74,11 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
             name="type"
             labelId="account-type-label"
             label="账户类型"
-            value={type}
-            onChange={(event) => setType(event.target.value as AccountRecord['type'])}
+            value={formValues.type}
+            onChange={(event) => setFormValues((current) => ({
+              ...current,
+              type: event.target.value as AccountRecord['type'],
+            }))}
           >
             {accountTypes.map((type) => (
               <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
@@ -81,8 +86,12 @@ export default function AccountForm({ account, icons, onCancel }: AccountFormPro
           </Select>
         </FormControl>
 
-        <input type="hidden" name="icon" value={selectedIcon} />
-        <AccountIconPicker icons={icons} value={selectedIcon} onChange={setSelectedIcon} />
+        <input type="hidden" name="icon" value={formValues.icon} />
+        <AccountIconPicker
+          icons={icons}
+          value={formValues.icon}
+          onChange={(icon) => setFormValues((current) => ({ ...current, icon }))}
+        />
 
         <TextField
           id="account-icon"

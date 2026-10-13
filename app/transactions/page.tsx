@@ -7,12 +7,16 @@ import TransactionsList from "@/src/components/TransactionsList";
 import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
 
+/**
+ * 组件：交易明细页面
+ * 功能：提供交易录入表单和完整流水列表，供用户记录、查看及整理交易。
+ */
 const destinationAccounts = alias(accounts, "destination_accounts");
 const parentCategories = alias(categories, "parent_categories");
 
 export default function TransactionsPage() {
 
-  // Fetch account options from the database
+  // 读取未归档账户，供交易表单选择。
   const accountOptions = db
     .select({
       id: accounts.id,
@@ -27,7 +31,7 @@ export default function TransactionsPage() {
     .orderBy(asc(accounts.name))
     .all();
 
-  // Fetch category options from the database
+  // 读取交易分类及其层级、图标和颜色，供录入和流水展示使用。
   const categoryOptions = db
     .select({
       id: categories.id,
@@ -43,7 +47,7 @@ export default function TransactionsPage() {
     .orderBy(asc(categories.sortOrder), asc(categories.name)) 
     .all();
 
-  // Fetch transaction rows from the database
+  // 读取交易流水，并补充账户、分类、上级分类和转入账户的显示信息。
   const transactionRows = db
     .select({
       id: transactions.id,
@@ -51,6 +55,8 @@ export default function TransactionsPage() {
       amount: transactions.amount,
       occurredAt: transactions.occurredAt,
       notes: transactions.notes,
+      accountId: transactions.accountId,
+      toAccountId: transactions.toAccountId,
       accountName: accounts.name,
       currency: accounts.currency,
       categoryId: transactions.categoryId,
@@ -73,7 +79,7 @@ export default function TransactionsPage() {
     <Stack component="section" spacing={3.5}>
       <PageHeading eyebrow="ACTIVITY" title="交易明细" description="记录收支与账户转账，查看完整流水" />
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
-      <TransactionsList transactions={transactionRows} />
+      <TransactionsList transactions={transactionRows} accounts={accountOptions} categories={categoryOptions} />
     </Stack>
   );
 }

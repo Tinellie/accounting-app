@@ -1,13 +1,14 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import List from '@mui/material/List';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
-import Typography from '@mui/material/Typography';
+import { List, ListItemButton, ListItemText, Typography } from '@mui/material';
 
 import NextLink from '@/src/components/NextLink';
 
+/**
+ * 组件：应用主导航
+ * 功能：提供首页、交易明细、账户管理和分类管理之间的导航入口。
+ */
 const navigationItems = [
   { href: '/', label: '首页看板', number: '01' },
   { href: '/transactions', label: '交易明细', number: '02' },
@@ -16,6 +17,7 @@ const navigationItems = [
 ];
 
 export default function AppNavigation() {
+  // 当前访问路径，用来标记对应的导航项目。
   const pathname = usePathname();
 
   return (

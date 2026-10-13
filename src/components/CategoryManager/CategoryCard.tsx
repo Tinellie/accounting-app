@@ -1,11 +1,15 @@
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
+import { Box, Paper } from '@mui/material';
 import CategoryRow from './CategoryRow';
 import SortableCategoryGroup from './SortableCategoryGroup';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
 import type { CategoryRecord } from './types';
 import type { ReactNode } from 'react';
 
+/**
+ * 组件：分类卡片
+ * 功能：展示一级分类及其子分类，帮助用户查看分类层级和颜色标识。
+ * 用户可以整理子分类顺序或编辑分类资料。
+ */
 type CategoryCardProps = {
   category: CategoryRecord;
   subcategories: CategoryRecord[];
@@ -14,6 +18,7 @@ type CategoryCardProps = {
 };
 
 export default function CategoryCard({ category, subcategories, onEdit, dragHandle }: CategoryCardProps) {
+  // 一级分类没有自定义颜色时，使用系统分配的默认颜色。
   const rootColor = category.color ?? fallbackCategoryColor(category.id);
 
   return (

@@ -1,18 +1,12 @@
 'use client';
 
 import { useDeferredValue, useState } from 'react';
-import ClearIcon from '@mui/icons-material/Clear';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
-import SearchIcon from '@mui/icons-material/Search';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Popover from '@mui/material/Popover';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
+import {
+  Clear as ClearIcon,
+  CategoryOutlined as CategoryOutlinedIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import { Box, Button, IconButton, InputAdornment, Popover, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import CategoryIcon, {
   getCategoryIconLabel,
   getCategoryIconLigature,
@@ -20,22 +14,41 @@ import CategoryIcon, {
   popularCategoryIcons,
 } from './CategoryIcon';
 
+/**
+ * 组件：分类图标选择器
+ * 功能：供用户搜索、浏览并选择分类图标，也可清除当前选择。
+ */
 type CategoryIconPickerProps = {
   iconNames: string[];
   value: string;
   onChange: (icon: string) => void;
 };
 
+type CategoryIconPickerState = {
+  anchorElement: HTMLElement | null;
+  searchQuery: string;
+  visibleCount: number;
+};
+
 const pageSize = 72;
 
 export default function CategoryIconPicker({ iconNames, value, onChange }: CategoryIconPickerProps) {
-  const [anchorElement, setAnchorElement] = useState<HTMLElement | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [visibleCount, setVisibleCount] = useState(pageSize);
+  // 图标弹窗锚点、搜索词和当前展示数量共同描述选择器界面。
+  const [pickerState, setPickerState] = useState<CategoryIconPickerState>({
+    anchorElement: null,
+    searchQuery: '',
+    visibleCount: pageSize,
+  });
+  const { anchorElement, searchQuery, visibleCount } = pickerState;
+  // 延后用于筛选的搜索词，避免输入时立即处理全部图标。
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
+  // 标准化后的当前图标名称。
   const selectedIcon = normalizeCategoryIconName(value);
+  // 当前图标在常用图标列表中的资料，用于显示本地化标签。
   const selectedPopularIcon = popularCategoryIcons.find((option) => option.name === selectedIcon);
+  // 选择器按钮上展示的图标名称。
   const selectedLabel = selectedPopularIcon?.label ?? (selectedIcon ? getCategoryIconLabel(selectedIcon) : '未选择图标');
+  // 按搜索词筛选出的图标；没有搜索时显示当前图标和常用图标。
   const matchingIcons = deferredSearchQuery
     ? iconNames.filter((name) => {
         const searchableName = `${name} ${getCategoryIconLabel(name)} ${getCategoryIconLigature(name)}`.toLowerCase();
@@ -47,11 +60,12 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
           : []),
         ...popularCategoryIcons.map((icon) => icon.name),
       ];
+  // 当前分页中实际展示的图标。
   const visibleIcons = matchingIcons.slice(0, visibleCount);
 
   function selectIcon(icon: string) {
     onChange(icon);
-    setAnchorElement(null);
+    setPickerState((current) => ({ ...current, anchorElement: null }));
   }
 
   return (
@@ -63,9 +77,7 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
           aria-haspopup="grid"
           aria-expanded={Boolean(anchorElement)}
           onClick={(event) => {
-            setSearchQuery('');
-            setVisibleCount(pageSize);
-            setAnchorElement(event.currentTarget);
+            setPickerState({ anchorElement: event.currentTarget, searchQuery: '', visibleCount: pageSize });
           }}
           sx={{
             width: 40,
@@ -81,7 +93,7 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
       <Popover
         open={Boolean(anchorElement)}
         anchorEl={anchorElement}
-        onClose={() => setAnchorElement(null)}
+        onClose={() => setPickerState((current) => ({ ...current, anchorElement: null }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       >
@@ -100,8 +112,11 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
               label="搜索全部图标"
               value={searchQuery}
               onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setVisibleCount(pageSize);
+                setPickerState((current) => ({
+                  ...current,
+                  searchQuery: event.target.value,
+                  visibleCount: pageSize,
+                }));
               }}
               slotProps={{
                 input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> },
@@ -151,7 +166,14 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
               </Typography>
             ) : null}
             {visibleIcons.length < matchingIcons.length ? (
-              <Button type="button" size="small" onClick={() => setVisibleCount((count) => count + pageSize)}>
+              <Button
+                type="button"
+                size="small"
+                onClick={() => setPickerState((current) => ({
+                  ...current,
+                  visibleCount: current.visibleCount + pageSize,
+                }))}
+              >
                 加载更多（{visibleIcons.length}/{matchingIcons.length}）
               </Button>
             ) : null}

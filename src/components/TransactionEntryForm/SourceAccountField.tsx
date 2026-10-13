@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import Autocomplete from '@mui/material/Autocomplete';
-import Avatar from '@mui/material/Avatar';
-import Box from '@mui/material/Box';
-import InputAdornment from '@mui/material/InputAdornment';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Autocomplete, Avatar, Box, InputAdornment, TextField, Typography } from '@mui/material';
 import { accountTypes } from '@/src/components/AccountManager/types';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
 import { filterCodeFirst, findExactCode } from './optionFilters';
 import type { AccountOption, TransactionType } from './types';
 
+/**
+ * 组件：交易账户选择器
+ * 功能：让用户选择收入或支出的账户；转账时选择转出账户。
+ */
 type SourceAccountFieldProps = {
   accounts: AccountOption[];
   type: TransactionType;
   sourceAccountId: string;
   onAccountChange: (accountId: string) => void;
+  fieldId?: string;
+  labelOverride?: string;
+  disabled?: boolean;
 };
 
 // 选择支出或收入账户；转账时选择转出账户。
@@ -23,12 +25,20 @@ export default function SourceAccountField({
   type,
   sourceAccountId,
   onAccountChange,
+  fieldId,
+  labelOverride,
+  disabled,
 }: SourceAccountFieldProps) {
-  const label = type === 'transfer' ? '转出账户' : '账户';
+  // 按交易类型确定账户输入框的标签和唯一 ID。
+  const label = labelOverride ?? (type === 'transfer' ? '转出账户' : '账户');
+  const autocompleteId = fieldId ?? 'txn-account';
+  // 按账户类型排序，供用户分组浏览和选择。
   const orderedAccounts = accountTypes.flatMap((accountType) => (
     accounts.filter((account) => account.type === accountType.value)
   ));
+  // 从当前账户选项中找到表单已选账户。
   const selectedAccount = accounts.find((account) => String(account.id) === sourceAccountId) ?? null;
+  // 账户搜索框当前显示的文字。
   const [inputValue, setInputValue] = useState(selectedAccount?.name ?? '');
 
   return (
@@ -36,10 +46,10 @@ export default function SourceAccountField({
       <input type="hidden" name="accountId" value={sourceAccountId} />
       <Autocomplete<AccountOption>
         key={type === 'transfer' ? 'transfer-source-account' : 'source-account'}
-        id="txn-account"
+        id={autocompleteId}
         fullWidth
         size="small"
-        disabled={accounts.length === 0}
+        disabled={disabled ?? accounts.length === 0}
         options={orderedAccounts}
         value={selectedAccount}
         inputValue={inputValue}
@@ -86,8 +96,10 @@ export default function SourceAccountField({
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>{children}</ul>
           </li>
         )}
-        renderOption={(props, account) => (
-          <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        renderOption={(props, account) => {
+          const { key, ...optionProps } = props;
+          return (
+          <Box key={key} component="li" {...optionProps} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
             <Avatar
               src={accountIconUrl(account.icon)}
               alt={`${account.name}图标`}
@@ -101,7 +113,8 @@ export default function SourceAccountField({
             </Box>
             {account.code ? <Typography variant="caption" color="text.secondary">{account.code}</Typography> : null}
           </Box>
-        )}
+          );
+        }}
         renderInput={(params) => (
           <TextField
             {...params}

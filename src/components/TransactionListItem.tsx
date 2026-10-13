@@ -1,14 +1,17 @@
-import Box from '@mui/material/Box';
-import Checkbox from '@mui/material/Checkbox';
-import Typography from '@mui/material/Typography';
+import { Box, Checkbox, Typography } from '@mui/material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
 import { transactions } from '@/src/db/schema';
 import { formatMinorUnits } from '@/src/lib/money';
 
+/**
+ * 组件：交易列表项
+ * 功能：展示一笔交易的金额、时间、账户和分类信息。
+ * 用户可以勾选该记录以进行批量操作。
+ */
 export type TransactionListItemData = Pick<
   typeof transactions.$inferSelect,
-  'id' | 'type' | 'amount' | 'occurredAt' | 'notes'
+  'id' | 'type' | 'amount' | 'occurredAt' | 'notes' | 'accountId' | 'toAccountId'
 > & {
   accountName: string;
   currency: string;
@@ -23,6 +26,8 @@ export type TransactionListItemData = Pick<
 
 type TransactionListItemProps = {
   transaction: TransactionListItemData;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
 };
 
 const transactionDisplay = {
@@ -32,15 +37,20 @@ const transactionDisplay = {
   adjustment: { label: '调整', color: 'text.primary' },
 } as const;
 
-export default function TransactionListItem({ transaction }: TransactionListItemProps) {
+export default function TransactionListItem({ transaction, selected, onSelectedChange }: TransactionListItemProps) {
+  // 当前交易类型对应的显示名称和颜色。
   const display = transactionDisplay[transaction.type];
+  // 标记转账记录，以调整列表中账户信息的展示。
   const isTransfer = transaction.type === 'transfer';
+  // 支出金额加负号展示，其他类型保留原方向。
   const amountForDisplay = transaction.type === 'expense' ? -transaction.amount : transaction.amount;
+  // 优先使用分类自身颜色，再回退到上级或默认颜色。
   const categoryColor = transaction.categoryColor ?? (
     transaction.categoryParentId === null
       ? transaction.categoryId === null ? null : fallbackCategoryColor(transaction.categoryId)
       : transaction.categoryParentColor ?? fallbackCategoryColor(transaction.categoryParentId)
   );
+  // 转账和余额调整仅在金额为负数时显示负号。
   const sign = transaction.type === 'transfer' || transaction.type === 'adjustment'
     ? transaction.amount < 0 ? '−' : ''
     : amountForDisplay < 0 ? '−' : amountForDisplay > 0 ? '+' : '';
@@ -62,6 +72,8 @@ export default function TransactionListItem({ transaction }: TransactionListItem
     >
       <Checkbox
         size="small"
+        checked={selected}
+        onChange={(event) => onSelectedChange?.(event.target.checked)}
         slotProps={{ input: { 'aria-label': `选择${display.label}记录` } }}
         sx={{
           gridColumn: 1,

@@ -1,5 +1,9 @@
-import Box from '@mui/material/Box';
+import { Box } from '@mui/material';
 
+/**
+ * 组件：分类图标
+ * 功能：在分类相关位置显示对应图标，帮助用户快速辨认分类。
+ */
 export const popularCategoryIcons = [
   { name: 'AccountBalance', label: '银行' },
   { name: 'AccountBalanceWallet', label: '钱包' },
@@ -113,6 +117,7 @@ export function getCategoryIconLigature(name: string): string {
 }
 
 export default function CategoryIcon({ name, fontSize = 'medium', color = 'inherit' }: CategoryIconProps) {
+  // 将旧图标名称转换为当前使用的标准名称。
   const iconName = normalizeCategoryIconName(name);
   if (!iconName) return null;
 

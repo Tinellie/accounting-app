@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { revalidatePath } from "next/cache";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { buildCategoryTree, classifyTransactions } from "@/scripts/lib/deepseek-category-classifier.mjs";
 import { db } from "@/src/db";
@@ -51,6 +51,20 @@ const importedTransactionSchema = z.object({
 const saveImportedTransactionsSchema = z.object({
   accountId: positiveIdSchema,
   rows: z.array(importedTransactionSchema).min(1, "没有可保存的交易").max(200, "一次最多保存 200 笔交易"),
+});
+
+const updateTransactionSchema = createTransactionSchema.extend({ id: positiveIdSchema });
+const transactionIdsSchema = z.array(positiveIdSchema)
+  .min(1, "请先选择交易")
+  .max(500, "一次最多处理 500 笔交易")
+  .refine((ids) => new Set(ids).size === ids.length, "交易编号不能重复");
+const bulkCategorySchema = z.object({
+  transactionIds: transactionIdsSchema,
+  categoryId: positiveIdSchema,
+});
+const bulkAccountSchema = z.object({
+  transactionIds: transactionIdsSchema,
+  accountId: positiveIdSchema,
 });
 
 export type SaveImportedTransactionsResult = {
@@ -420,4 +434,379 @@ export async function saveImportedTransactionsAction(
   revalidatePath("/accounts");
 
   return { success: true, message: `已导入 ${preparedRows.length} 笔交易` };
+}
+
+export async function updateTransactionAction(
+  _previousState: TransactionActionState,
+  formData: FormData,
+): Promise<TransactionActionState> {
+  const parsed = updateTransactionSchema.safeParse({
+    id: formData.get("id"),
+    type: formData.get("type"),
+    amount: formData.get("amount"),
+    occurredAt: formData.get("occurredAt"),
+    accountId: formData.get("accountId"),
+    toAccountId: formData.get("toAccountId"),
+    categoryId: formData.get("categoryId"),
+    notes: formData.get("notes") ?? "",
+  });
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "请检查交易信息" };
+  }
+
+  const updated = parsed.data;
+
+  try {
+    db.transaction((tx) => {
+      const current = tx.select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        accountId: transactions.accountId,
+        toAccountId: transactions.toAccountId,
+      })
+        .from(transactions)
+        .where(eq(transactions.id, updated.id))
+        .get();
+
+      if (!current || current.type === "adjustment") {
+        throw new TransactionActionError("交易不存在或此类型暂不支持编辑");
+      }
+
+      const sourceAccount = tx.select({ id: accounts.id, currency: accounts.currency, isArchived: accounts.isArchived })
+        .from(accounts)
+        .where(eq(accounts.id, updated.accountId))
+        .get();
+      if (!sourceAccount || sourceAccount.isArchived) {
+        throw new TransactionActionError("所选账户不存在或已归档");
+      }
+
+      let destinationAccount: typeof sourceAccount | undefined;
+      if (updated.type === "transfer" && updated.toAccountId !== null) {
+        destinationAccount = tx
+          .select({ id: accounts.id, currency: accounts.currency, isArchived: accounts.isArchived })
+          .from(accounts)
+          .where(eq(accounts.id, updated.toAccountId))
+          .get();
+        if (!destinationAccount || destinationAccount.isArchived) {
+          throw new TransactionActionError("所选转入账户不存在或已归档");
+        }
+        if (destinationAccount.id === sourceAccount.id || destinationAccount.currency !== sourceAccount.currency) {
+          throw new TransactionActionError("转账账户不能相同，且货币单位必须相同");
+        }
+      }
+
+      if (updated.categoryId !== null) {
+        const category = tx.select({ type: categories.type })
+          .from(categories)
+          .where(eq(categories.id, updated.categoryId))
+          .get();
+        if (!category || category.type !== updated.type) {
+          throw new TransactionActionError("所选分类不存在或与交易类型不匹配");
+        }
+      }
+
+      const addBalance = (accountId: number, delta: number) => {
+        tx.update(accounts)
+          .set({ balance: sql`${accounts.balance} + ${delta}` })
+          .where(eq(accounts.id, accountId))
+          .run();
+      };
+      const sourceDelta = (type: string, amount: number) => type === "income" ? amount : -amount;
+
+      addBalance(current.accountId, -sourceDelta(current.type, current.amount));
+      if (current.type === "transfer" && current.toAccountId !== null) {
+        addBalance(current.toAccountId, -current.amount);
+      }
+
+      addBalance(sourceAccount.id, sourceDelta(updated.type, updated.amount));
+      if (updated.type === "transfer" && destinationAccount) {
+        addBalance(destinationAccount.id, updated.amount);
+      }
+
+      tx.update(transactions)
+        .set({
+          type: updated.type,
+          amount: updated.amount,
+          occurredAt: updated.occurredAt,
+          accountId: sourceAccount.id,
+          toAccountId: updated.type === "transfer" ? updated.toAccountId : null,
+          categoryId: updated.categoryId,
+          notes: updated.notes || null,
+        })
+        .where(eq(transactions.id, updated.id))
+        .run();
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: "更新交易失败" };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  return { success: true, message: "交易已更新" };
+}
+
+export async function bulkUpdateTransactionCategoryAction(input: unknown): Promise<SaveImportedTransactionsResult> {
+  const parsed = bulkCategorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "分类批量更新数据无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selected = tx.select({ id: transactions.id, type: transactions.type })
+        .from(transactions)
+        .where(inArray(transactions.id, parsed.data.transactionIds))
+        .all();
+      if (selected.length !== parsed.data.transactionIds.length) {
+        throw new TransactionActionError("部分交易已不存在，请刷新后重试");
+      }
+      const firstType = selected[0]?.type;
+      if (
+        (firstType !== "expense" && firstType !== "income") ||
+        selected.some((transaction) => transaction.type !== firstType)
+      ) {
+        throw new TransactionActionError("只能为同类型的支出或收入批量修改分类");
+      }
+
+      const category = tx.select({ id: categories.id, type: categories.type })
+        .from(categories)
+        .where(eq(categories.id, parsed.data.categoryId))
+        .get();
+      if (!category || category.type !== firstType) {
+        throw new TransactionActionError("分类不存在或与所选交易类型不匹配");
+      }
+
+      tx.update(transactions)
+        .set({ categoryId: category.id })
+        .where(inArray(transactions.id, parsed.data.transactionIds))
+        .run();
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) return { success: false, message: error.message };
+    return { success: false, message: "批量修改分类失败" };
+  }
+
+  revalidatePath("/transactions");
+  return { success: true, message: "已批量修改分类" };
+}
+
+export async function bulkUpdateTransactionAccountAction(input: unknown): Promise<SaveImportedTransactionsResult> {
+  const parsed = bulkAccountSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "账户批量更新数据无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selected = tx.select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        accountId: transactions.accountId,
+        toAccountId: transactions.toAccountId,
+      })
+        .from(transactions)
+        .where(inArray(transactions.id, parsed.data.transactionIds))
+        .all();
+      if (selected.length !== parsed.data.transactionIds.length) {
+        throw new TransactionActionError("部分交易已不存在，请刷新后重试");
+      }
+
+      const targetAccount = tx.select({ id: accounts.id, currency: accounts.currency, isArchived: accounts.isArchived })
+        .from(accounts)
+        .where(eq(accounts.id, parsed.data.accountId))
+        .get();
+      if (!targetAccount || targetAccount.isArchived) {
+        throw new TransactionActionError("所选账户不存在或已归档");
+      }
+
+      const sourceAccounts = tx.select({ id: accounts.id, currency: accounts.currency })
+        .from(accounts)
+        .where(inArray(accounts.id, [...new Set(selected.map((transaction) => transaction.accountId))]))
+        .all();
+      const sourceCurrencies = new Map(sourceAccounts.map((account) => [account.id, account.currency]));
+      if (selected.some((transaction) => sourceCurrencies.get(transaction.accountId) !== targetAccount.currency)) {
+        throw new TransactionActionError("不同货币的交易不能批量移动到同一个账户");
+      }
+
+      const addBalance = (accountId: number, delta: number) => {
+        tx.update(accounts)
+          .set({ balance: sql`${accounts.balance} + ${delta}` })
+          .where(eq(accounts.id, accountId))
+          .run();
+      };
+
+      for (const transaction of selected) {
+        if (transaction.type === "transfer") {
+          if (transaction.toAccountId === targetAccount.id) {
+            throw new TransactionActionError("转账账户不能与转入账户相同");
+          }
+          if (transaction.toAccountId !== null) {
+            const destination = tx.select({ currency: accounts.currency })
+              .from(accounts)
+              .where(eq(accounts.id, transaction.toAccountId))
+              .get();
+            if (!destination || destination.currency !== targetAccount.currency) {
+              throw new TransactionActionError("转账账户的货币单位必须与转入账户相同");
+            }
+          }
+        }
+
+        if (transaction.accountId === targetAccount.id) continue;
+        const sourceDelta = transaction.type === "income"
+          ? transaction.amount
+          : transaction.type === "adjustment" ? transaction.amount : -transaction.amount;
+        addBalance(transaction.accountId, -sourceDelta);
+        addBalance(targetAccount.id, sourceDelta);
+      }
+
+      tx.update(transactions)
+        .set({ accountId: targetAccount.id })
+        .where(inArray(transactions.id, parsed.data.transactionIds))
+        .run();
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) return { success: false, message: error.message };
+    return { success: false, message: "批量修改账户失败" };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  return { success: true, message: "已批量修改账户" };
+}
+
+export async function reverseTransactionCategoryTypeAction(input: unknown): Promise<SaveImportedTransactionsResult> {
+  const parsedIds = transactionIdsSchema.safeParse(input);
+  if (!parsedIds.success) {
+    return { success: false, message: parsedIds.error.issues[0]?.message ?? "所选交易无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selected = tx.select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        accountId: transactions.accountId,
+      })
+        .from(transactions)
+        .where(inArray(transactions.id, parsedIds.data))
+        .all();
+      if (selected.length !== parsedIds.data.length) {
+        throw new TransactionActionError("部分交易已不存在，请刷新后重试");
+      }
+      const currentType = selected[0]?.type;
+      if (
+        (currentType !== "expense" && currentType !== "income") ||
+        selected.some((transaction) => transaction.type !== currentType)
+      ) {
+        throw new TransactionActionError("只能反转同类型的支出或收入，不能包含转账");
+      }
+
+      const reversedRows = selected.map((transaction) => {
+        const signedAmount = currentType === "income" ? transaction.amount : -transaction.amount;
+        const reversedSignedAmount = signedAmount * -1;
+        return {
+          transaction,
+          reversedSignedAmount,
+          targetType: reversedSignedAmount > 0 ? "income" as const : "expense" as const,
+        };
+      });
+      const targetType = reversedRows[0]?.targetType;
+      if (!targetType || reversedRows.some((row) => row.targetType !== targetType)) {
+        throw new TransactionActionError("所选交易无法统一反转收支类型");
+      }
+      const targetCategory = tx.select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.type, targetType), sql`${categories.parentId} IS NULL`))
+        .orderBy(asc(categories.sortOrder), asc(categories.name))
+        .get();
+      if (!targetCategory) {
+        throw new TransactionActionError(`请先创建${targetType === "income" ? "收入" : "支出"}分类`);
+      }
+
+      for (const row of reversedRows) {
+        const transaction = row.transaction;
+        const signedAmount = currentType === "income" ? transaction.amount : -transaction.amount;
+        tx.update(accounts)
+          .set({ balance: sql`${accounts.balance} + ${row.reversedSignedAmount - signedAmount}` })
+          .where(eq(accounts.id, transaction.accountId))
+          .run();
+
+        tx.update(transactions)
+          .set({
+            type: row.targetType,
+            amount: Math.abs(row.reversedSignedAmount),
+            categoryId: targetCategory.id,
+          })
+          .where(eq(transactions.id, transaction.id))
+          .run();
+      }
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) return { success: false, message: error.message };
+    return { success: false, message: "反转交易类型失败" };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  return { success: true, message: "已反转交易收支类型，并设置为目标类型的首个分类" };
+}
+
+export async function deleteTransactionsAction(input: unknown): Promise<SaveImportedTransactionsResult> {
+  const parsedIds = transactionIdsSchema.safeParse(input);
+  if (!parsedIds.success) {
+    return { success: false, message: parsedIds.error.issues[0]?.message ?? "所选交易无效" };
+  }
+
+  try {
+    db.transaction((tx) => {
+      const selected = tx.select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        accountId: transactions.accountId,
+        toAccountId: transactions.toAccountId,
+      })
+        .from(transactions)
+        .where(inArray(transactions.id, parsedIds.data))
+        .all();
+      if (selected.length !== parsedIds.data.length) {
+        throw new TransactionActionError("部分交易已不存在，请刷新后重试");
+      }
+
+      for (const transaction of selected) {
+        const sourceDelta = transaction.type === "income"
+          ? transaction.amount
+          : transaction.type === "adjustment" ? transaction.amount : -transaction.amount;
+        tx.update(accounts)
+          .set({ balance: sql`${accounts.balance} + ${-sourceDelta}` })
+          .where(eq(accounts.id, transaction.accountId))
+          .run();
+        if (transaction.type === "transfer" && transaction.toAccountId !== null) {
+          tx.update(accounts)
+            .set({ balance: sql`${accounts.balance} - ${transaction.amount}` })
+            .where(eq(accounts.id, transaction.toAccountId))
+            .run();
+        }
+      }
+
+      tx.delete(transactions).where(inArray(transactions.id, parsedIds.data)).run();
+    });
+  } catch (error) {
+    if (error instanceof TransactionActionError) return { success: false, message: error.message };
+    return { success: false, message: "批量删除交易失败" };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/");
+  revalidatePath("/accounts");
+  return { success: true, message: `已删除 ${parsedIds.data.length} 笔交易` };
 }

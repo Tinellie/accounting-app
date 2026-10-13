@@ -1,6 +1,9 @@
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
+import { Box, Typography } from '@mui/material';
 
+/**
+ * 组件：页面标题
+ * 功能：展示当前页面的标题和简短说明，帮助用户识别所在页面。
+ */
 type PageHeadingProps = {
   eyebrow: string;
   title: string;

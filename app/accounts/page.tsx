@@ -6,7 +6,12 @@ import { db } from "@/src/db";
 import { accounts } from "@/src/db/schema";
 import { listAccountIcons } from "@/src/lib/account-icons";
 
+/**
+ * 组件：账户管理页面
+ * 功能：展示账户管理工具，供用户新增、编辑和整理账户。
+ */
 export default async function AccountsPage() {
+  // 读取账户管理页需要展示的账户资料，并按归档状态、类型和顺序排列。
   const accountRows = db
     .select({
       id: accounts.id,
@@ -22,6 +27,7 @@ export default async function AccountsPage() {
     .from(accounts)
     .orderBy(asc(accounts.isArchived), asc(accounts.type), asc(accounts.sortOrder), asc(accounts.name))
     .all();
+  // 读取供账户表单选择的预置图标。
   const availableIcons = await listAccountIcons();
 
   return (

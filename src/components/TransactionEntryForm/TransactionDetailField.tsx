@@ -1,11 +1,5 @@
 import { useState } from 'react';
-import FormHelperText from '@mui/material/FormHelperText';
-import Autocomplete from '@mui/material/Autocomplete';
-import Box from '@mui/material/Box';
-import Avatar from '@mui/material/Avatar';
-import InputAdornment from '@mui/material/InputAdornment';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Autocomplete, Avatar, Box, FormHelperText, InputAdornment, TextField, Typography } from '@mui/material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { accountTypes } from '@/src/components/AccountManager/types';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
@@ -13,6 +7,10 @@ import { fallbackCategoryColor } from '@/src/lib/category-colors';
 import { filterCodeFirst, findExactCode } from './optionFilters';
 import type { AccountOption, CategoryOption, TransactionType } from './types';
 
+/**
+ * 组件：交易分类或转入账户选择器
+ * 功能：支出和收入时供用户选择分类，转账时选择转入账户。
+ */
 type TransactionDetailFieldProps = {
   type: TransactionType;
   accounts: AccountOption[];
@@ -22,6 +20,8 @@ type TransactionDetailFieldProps = {
   destinationAccountId: string;
   onCategoryChange: (categoryId: string) => void;
   onDestinationChange: (accountId: string) => void;
+  fieldId?: string;
+  disabled?: boolean;
 };
 
 // 转账时选择转入账户，收入或支出时选择对应分类。
@@ -34,8 +34,14 @@ export default function TransactionDetailField({
   destinationAccountId,
   onCategoryChange,
   onDestinationChange,
+  fieldId,
+  disabled,
 }: TransactionDetailFieldProps) {
+  // 当前交易是否为转账，决定显示转入账户还是分类。
   const isTransfer = type === 'transfer';
+  // 当前输入控件使用的唯一 ID。
+  const autocompleteId = fieldId ?? 'txn-detail';
+  // 按上级分类整理分类数据，供下拉选项展示层级。
   const categoriesByParent = new Map<number | null, CategoryOption[]>();
   categories.forEach((category) => {
     const siblings = categoriesByParent.get(category.parentId) ?? [];
@@ -45,6 +51,7 @@ export default function TransactionDetailField({
   const sortCategories = (items: CategoryOption[]) => items.sort(
     (left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
   );
+  // 按一级分类及其子分类的顺序排列选项。
   const orderedCategories = sortCategories(categoriesByParent.get(null) ?? []).flatMap((category) => [
     category,
     ...sortCategories(categoriesByParent.get(category.id) ?? []),
@@ -52,12 +59,18 @@ export default function TransactionDetailField({
   const orderedAccounts = accountTypes.flatMap((accountType) => (
     accounts.filter((account) => account.type === accountType.value)
   ));
+  // 找到当前已选中的转入账户和分类。
   const selectedDestinationAccount = accounts.find(
     (account) => String(account.id) === destinationAccountId,
   ) ?? null;
   const selectedCategory = categories.find((category) => String(category.id) === categoryId) ?? null;
-  const [destinationInputValue, setDestinationInputValue] = useState(selectedDestinationAccount?.name ?? '');
-  const [categoryInputValue, setCategoryInputValue] = useState(selectedCategory?.name ?? '');
+  // 两种交易详情搜索框各自保留输入文字，切换类型时不丢失搜索内容。
+  const [inputValues, setInputValues] = useState({
+    destination: selectedDestinationAccount?.name ?? '',
+    category: selectedCategory?.name ?? '',
+  });
+  const { destination: destinationInputValue, category: categoryInputValue } = inputValues;
+  // 一级分类颜色表，用于子分类图标颜色回退。
   const rootColors = new Map(
     categories
       .filter((category) => category.parentId === null)
@@ -70,8 +83,8 @@ export default function TransactionDetailField({
         <>
           <input type="hidden" name="toAccountId" value={destinationAccountId} />
           <Autocomplete<AccountOption>
-            key="transfer-destination-account"
-            id="txn-detail"
+            key={fieldId ? `${fieldId}-transfer-destination` : 'transfer-destination-account'}
+            id={autocompleteId}
             fullWidth
             size="small"
             disabled={accounts.length < 2}
@@ -79,16 +92,16 @@ export default function TransactionDetailField({
             value={selectedDestinationAccount}
             inputValue={destinationInputValue}
             onChange={(_, account) => {
-              setDestinationInputValue(account?.name ?? '');
+              setInputValues((current) => ({ ...current, destination: account?.name ?? '' }));
               onDestinationChange(account ? String(account.id) : '');
             }}
             onInputChange={(_, inputValue, reason) => {
               if (reason === 'input') {
                 const exactMatch = findExactCode(orderedAccounts, inputValue);
-                setDestinationInputValue(exactMatch?.name ?? inputValue);
+                setInputValues((current) => ({ ...current, destination: exactMatch?.name ?? inputValue }));
                 onDestinationChange(exactMatch ? String(exactMatch.id) : '');
               } else if (reason === 'clear') {
-                setDestinationInputValue('');
+                setInputValues((current) => ({ ...current, destination: '' }));
                 onDestinationChange('');
               }
             }}
@@ -122,8 +135,10 @@ export default function TransactionDetailField({
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>{children}</ul>
               </li>
             )}
-            renderOption={(props, account) => (
-              <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            renderOption={(props, account) => {
+              const { key, ...optionProps } = props;
+              return (
+              <Box key={key} component="li" {...optionProps} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                 <Avatar
                   src={accountIconUrl(account.icon)}
                   alt={`${account.name}图标`}
@@ -137,7 +152,8 @@ export default function TransactionDetailField({
                 </Box>
                 {account.code ? <Typography variant="caption" color="text.secondary">{account.code}</Typography> : null}
               </Box>
-            )}
+              );
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -176,25 +192,25 @@ export default function TransactionDetailField({
         <>
           <input type="hidden" name="categoryId" value={categoryId} />
           <Autocomplete<CategoryOption>
-            key="transaction-category"
-            id="txn-detail"
+            key={fieldId ? `${fieldId}-${type}-category` : 'transaction-category'}
+            id={autocompleteId}
             fullWidth
             size="small"
-            disabled={categories.length === 0}
+            disabled={disabled ?? categories.length === 0}
             options={orderedCategories}
             value={selectedCategory}
             inputValue={categoryInputValue}
             onChange={(_, category) => {
-              setCategoryInputValue(category?.name ?? '');
+              setInputValues((current) => ({ ...current, category: category?.name ?? '' }));
               onCategoryChange(category ? String(category.id) : '');
             }}
             onInputChange={(_, inputValue, reason) => {
               if (reason === 'input') {
                 const exactMatch = findExactCode(orderedCategories, inputValue);
-                setCategoryInputValue(exactMatch?.name ?? inputValue);
+                setInputValues((current) => ({ ...current, category: exactMatch?.name ?? inputValue }));
                 onCategoryChange(exactMatch ? String(exactMatch.id) : '');
               } else if (reason === 'clear') {
-                setCategoryInputValue('');
+                setInputValues((current) => ({ ...current, category: '' }));
                 onCategoryChange('');
               }
             }}
@@ -202,10 +218,13 @@ export default function TransactionDetailField({
             isOptionEqualToValue={(option, value) => option.id === value.id}
             filterOptions={(options, state) => filterCodeFirst(options, state.inputValue)}
             noOptionsText="没有匹配的分类"
-            renderOption={(props, category) => (
+            renderOption={(props, category) => {
+              const { key, ...optionProps } = props;
+              return (
               <Box
+                key={key}
                 component="li"
-                {...props}
+                {...optionProps}
                 sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
               >
                 <Box
@@ -237,7 +256,8 @@ export default function TransactionDetailField({
                   {category.code ? <Typography variant="caption" color="text.secondary">{category.code}</Typography> : null}
                 </Box>
               </Box>
-            )}
+              );
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}

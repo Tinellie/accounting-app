@@ -1,16 +1,19 @@
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Alert, Box, Stack, Typography } from '@mui/material';
 import SortableAccountGroup from './SortableAccountGroup';
 import { accountTypes, type AccountRecord } from './types';
 
+/**
+ * 组件：账户列表
+ * 功能：按账户类型展示未归档账户，并单独列出已归档账户。
+ * 用户可以浏览账户分组并选择要编辑的账户。
+ */
 type AccountListProps = {
   accounts: AccountRecord[];
   onEdit: (account: AccountRecord) => void;
 };
 
 export default function AccountList({ accounts, onEdit }: AccountListProps) {
+  // 分别保存正常使用和已归档的账户，供列表分区展示。
   const activeAccounts = accounts.filter((account) => !account.isArchived);
   const archivedAccounts = accounts.filter((account) => account.isArchived);
 

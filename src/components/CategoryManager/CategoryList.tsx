@@ -1,17 +1,20 @@
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Alert, Box, Stack, Typography } from '@mui/material';
 import CategoryCard from './CategoryCard';
 import SortableCategoryGroup from './SortableCategoryGroup';
 import { categoryTypes, type CategoryRecord } from './types';
 
+/**
+ * 组件：分类列表
+ * 功能：按收支类型展示一级分类及其下级分类。
+ * 用户可以浏览分类层级、调整顺序或选择分类进行编辑。
+ */
 type CategoryListProps = {
   categories: CategoryRecord[];
   onEdit: (category: CategoryRecord) => void;
 };
 
 export default function CategoryList({ categories, onEdit }: CategoryListProps) {
+  // 仅取一级分类作为每种收支类型下的列表入口。
   const rootCategories = categories.filter((category) => category.parentId === null);
 
   return (

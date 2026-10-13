@@ -1,17 +1,15 @@
 import type { ReactNode } from 'react';
-import Box from '@mui/material/Box';
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardActions from '@mui/material/CardActions';
-import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
-import Typography from '@mui/material/Typography';
+import { Avatar, Box, Button, Card, CardActions, CardContent, Chip, Typography } from '@mui/material';
 import { setAccountArchivedAction } from '@/app/accounts/actions';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
 import { formatMinorUnits } from '@/src/lib/money';
 import type { AccountRecord } from './types';
 
+/**
+ * 组件：账户卡片
+ * 功能：展示账户名称、类型、余额和归档状态，帮助用户查看账户情况。
+ * 用户可以从卡片进入编辑，也可以归档不再使用的账户。
+ */
 type AccountCardProps = {
   account: AccountRecord;
   onEdit: () => void;
@@ -19,6 +17,7 @@ type AccountCardProps = {
 };
 
 export default function AccountCard({ account, onEdit, dragHandle }: AccountCardProps) {
+  // 根据余额正负选择账户金额的提示颜色。
   const balanceColor = account.balance > 0
     ? 'success.main'
     : account.balance < 0

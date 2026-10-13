@@ -1,11 +1,14 @@
-import Box from '@mui/material/Box';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import { Box, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import type { TransactionType } from './types';
 
+/**
+ * 组件：交易类型选择器
+ * 功能：让用户在支出、收入和转账之间切换。
+ */
 type TransactionTypeSelectorProps = {
   type: TransactionType;
   onTypeChange: (type: TransactionType) => void;
+  fieldId?: string;
 };
 
 const transactionTypes: { value: TransactionType; label: string }[] = [
@@ -15,11 +18,11 @@ const transactionTypes: { value: TransactionType; label: string }[] = [
 ];
 
 // 提供交易类型切换，并将当前类型放入表单数据。
-export default function TransactionTypeSelector({ type, onTypeChange }: TransactionTypeSelectorProps) {
+export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 'txn-type' }: TransactionTypeSelectorProps) {
   return (
     <Box className="txn-type-field">
       <ToggleButtonGroup
-        id="txn-type"
+        id={fieldId}
         exclusive
         value={type}
         onChange={(_, nextType: TransactionType | null) => {
@@ -57,7 +60,7 @@ export default function TransactionTypeSelector({ type, onTypeChange }: Transact
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
-      <input id="txn-type-value" type="hidden" name="type" value={type} />
+      <input id={`${fieldId}-value`} type="hidden" name="type" value={type} />
     </Box>
   );
 }

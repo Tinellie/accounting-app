@@ -1,22 +1,7 @@
 'use client';
 
 import { useState, useTransition, type ChangeEvent } from 'react';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from '@mui/material';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import {
   previewTransactionImportAction,
@@ -27,8 +12,29 @@ import TransactionListItem, { type TransactionListItemData } from '@/src/compone
 import { toMinorUnits } from '@/src/lib/money';
 import type { AccountOption, CategoryOption, TransactionType } from './TransactionEntryForm/types';
 
+/**
+ * 组件：交易截图导入
+ * 功能：让用户上传微信或支付宝账单截图，检查识别结果并补充交易信息。
+ * 确认后可将整理好的记录加入账本。
+ */
 type ImportSource = 'wechat' | 'alipay';
 type PreviewTransaction = OcrImportRow & { id: number; categoryId: number | null };
+type TransactionImportState = {
+  // 当前导入来源；null 表示导入窗口关闭。
+  selectedSource: ImportSource | null;
+  // 用户选择的账单截图。
+  selectedFile: File | null;
+  // 识别后可检查和修改的交易列表。
+  previewRows: PreviewTransaction[];
+  // 用户选择将交易导入到哪个账户。
+  accountId: string;
+  // 阻止继续操作的错误信息。
+  errorMessage: string;
+  // 识别或分类建议产生的提醒。
+  warningMessage: string;
+  // 导入成功后显示的结果信息。
+  successMessage: string;
+};
 
 type TransactionImportActionsProps = {
   accounts: AccountOption[];
@@ -83,6 +89,8 @@ function makeListItem(
     amount: Math.abs(signedAmount),
     occurredAt,
     notes: row.description,
+    accountId: account.id,
+    toAccountId: null,
     accountName: account.name,
     currency: account.currency,
     categoryId: category?.id ?? null,
@@ -96,38 +104,54 @@ function makeListItem(
 }
 
 export default function TransactionImportActions({ accounts, categories }: TransactionImportActionsProps) {
-  const [selectedSource, setSelectedSource] = useState<ImportSource | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewRows, setPreviewRows] = useState<PreviewTransaction[]>([]);
-  const [accountId, setAccountId] = useState(String(accounts[0]?.id ?? ''));
-  const [errorMessage, setErrorMessage] = useState('');
-  const [warningMessage, setWarningMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  // 将来源、文件、预览、目标账户和结果提示集中保存为当前导入流程。
+  const [importState, setImportState] = useState<TransactionImportState>(() => ({
+    selectedSource: null,
+    selectedFile: null,
+    previewRows: [],
+    accountId: String(accounts[0]?.id ?? ''),
+    errorMessage: '',
+    warningMessage: '',
+    successMessage: '',
+  }));
+  const { selectedSource, selectedFile, previewRows, accountId, errorMessage, warningMessage, successMessage } = importState;
+  // 标记截图识别或导入保存是否正在进行。
   const [isPending, startTransition] = useTransition();
+  // 根据用户选择的账户 ID 找到对应账户资料。
   const selectedAccount = accounts.find((account) => account.id === Number(accountId));
 
+  function updateImportState(updates: Partial<TransactionImportState>) {
+    setImportState((current) => ({ ...current, ...updates }));
+  }
+
   function openDialog(source: ImportSource) {
-    setSelectedSource(source);
-    setSelectedFile(null);
-    setPreviewRows([]);
-    setAccountId(String(accounts[0]?.id ?? ''));
-    setErrorMessage('');
-    setWarningMessage('');
+    updateImportState({
+      selectedSource: source,
+      selectedFile: null,
+      previewRows: [],
+      accountId: String(accounts[0]?.id ?? ''),
+      errorMessage: '',
+      warningMessage: '',
+    });
   }
 
   function closeDialog() {
-    setSelectedSource(null);
-    setSelectedFile(null);
-    setPreviewRows([]);
-    setErrorMessage('');
-    setWarningMessage('');
+    updateImportState({
+      selectedSource: null,
+      selectedFile: null,
+      previewRows: [],
+      errorMessage: '',
+      warningMessage: '',
+    });
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedFile(event.currentTarget.files?.[0] ?? null);
-    setPreviewRows([]);
-    setErrorMessage('');
-    setWarningMessage('');
+    updateImportState({
+      selectedFile: event.currentTarget.files?.[0] ?? null,
+      previewRows: [],
+      errorMessage: '',
+      warningMessage: '',
+    });
     event.currentTarget.value = '';
   }
 
@@ -136,20 +160,22 @@ export default function TransactionImportActions({ accounts, categories }: Trans
 
     const formData = new FormData();
     formData.set('screenshot', selectedFile);
-    setErrorMessage('');
+    updateImportState({ errorMessage: '' });
 
     startTransition(async () => {
       try {
         const result = await previewTransactionImportAction(formData);
         if (!result.success) {
-          setErrorMessage(result.message);
+          updateImportState({ errorMessage: result.message });
           return;
         }
 
-        setWarningMessage(result.classificationWarning ?? '');
-        setPreviewRows(result.rows);
+        updateImportState({
+          warningMessage: result.classificationWarning ?? '',
+          previewRows: result.rows,
+        });
       } catch {
-        setErrorMessage('截图识别失败，请稍后重试');
+        updateImportState({ errorMessage: '截图识别失败，请稍后重试' });
       }
     });
   }
@@ -165,20 +191,20 @@ export default function TransactionImportActions({ accounts, categories }: Trans
       description: row.description ?? '',
       categoryId: row.categoryId ?? 0,
     }));
-    setErrorMessage('');
+    updateImportState({ errorMessage: '' });
 
     startTransition(async () => {
       try {
         const result = await saveImportedTransactionsAction({ accountId: selectedAccount.id, rows });
         if (!result.success) {
-          setErrorMessage(result.message);
+          updateImportState({ errorMessage: result.message });
           return;
         }
 
-        setSuccessMessage(result.message);
+        updateImportState({ successMessage: result.message });
         closeDialog();
       } catch {
-        setErrorMessage('批量保存失败，请稍后重试');
+        updateImportState({ errorMessage: '批量保存失败，请稍后重试' });
       }
     });
   }
@@ -189,24 +215,30 @@ export default function TransactionImportActions({ accounts, categories }: Trans
     const parentCategory = category?.parentId === null || !category
       ? undefined
       : categories.find((item) => item.id === category.parentId);
-    setPreviewRows((rows) => rows.map((row) => row.id === rowId ? {
-      ...row,
-      categoryId,
-      categoryCode: category?.code ?? null,
-      categoryName: category?.name ?? null,
-      categoryPath: category
-        ? parentCategory ? `${parentCategory.name} / ${category.name}` : category.name
-        : null,
-      categoryConfidence: null,
-      categoryReason: null,
-    } : row));
+    setImportState((current) => ({
+      ...current,
+      previewRows: current.previewRows.map((row) => row.id === rowId ? {
+        ...row,
+        categoryId,
+        categoryCode: category?.code ?? null,
+        categoryName: category?.name ?? null,
+        categoryPath: category
+          ? parentCategory ? `${parentCategory.name} / ${category.name}` : category.name
+          : null,
+        categoryConfidence: null,
+        categoryReason: null,
+      } : row),
+    }));
   }
 
+  // 将预览行整理成交易列表项的显示数据。
   const listItems = previewRows.map((row) => makeListItem(row, selectedAccount, categories));
+  // 检查每笔导入交易是否都已选择匹配收支方向的分类。
   const hasMatchingCategory = previewRows.every((row) => {
     const type = getTransactionType(row.amount);
     return Boolean(type && categories.some((category) => category.id === row.categoryId && category.type === type));
   });
+  // 只有账户、有效预览内容和匹配分类均齐备时才允许确认导入。
   const canConfirm = Boolean(
     selectedAccount && previewRows.length > 0 && listItems.every((item) => item !== null) && hasMatchingCategory,
   );
@@ -214,7 +246,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
   return (
     <>
       {successMessage ? (
-        <Alert severity="success" onClose={() => setSuccessMessage('')}>
+        <Alert severity="success" onClose={() => updateImportState({ successMessage: '' })}>
           {successMessage}
         </Alert>
       ) : null}
@@ -310,7 +342,7 @@ export default function TransactionImportActions({ accounts, categories }: Trans
                   labelId="txn-import-account-label"
                   value={accountId}
                   label="导入到账户"
-                  onChange={(event) => setAccountId(event.target.value)}
+                  onChange={(event) => updateImportState({ accountId: event.target.value })}
                 >
                   {accounts.map((account) => (
                     <MenuItem key={account.id} value={String(account.id)}>

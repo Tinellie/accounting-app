@@ -1,14 +1,17 @@
 'use client';
 
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
-import Alert from '@mui/material/Alert';
-import Stack from '@mui/material/Stack';
+import { Alert, Stack } from '@mui/material';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { reorderCategoriesAction } from '@/app/categories/actions';
 import SortableCategoryItem from './SortableCategoryItem';
 import type { CategoryRecord } from './types';
 
+/**
+ * 组件：可排序分类分组
+ * 功能：展示一组分类，并让用户拖动分类调整显示顺序。
+ */
 type SortableCategoryGroupProps = {
   id: string;
   categories: CategoryRecord[];
@@ -16,9 +19,15 @@ type SortableCategoryGroupProps = {
 };
 
 export default function SortableCategoryGroup({ id, categories, children }: SortableCategoryGroupProps) {
-  const [categoryOrder, setCategoryOrder] = useState(() => categories.map((category) => category.id));
-  const [errorMessage, setErrorMessage] = useState('');
+  // 当前分类顺序及保存失败提示属于同一次排序操作。
+  const [orderState, setOrderState] = useState(() => ({
+    categoryOrder: categories.map((category) => category.id),
+    errorMessage: '',
+  }));
+  const { categoryOrder, errorMessage } = orderState;
+  // 标记分类顺序是否正在保存。
   const [isPending, startTransition] = useTransition();
+  // 按用户保存的顺序排列分类，并保留新增分类。
   const orderedCategories = useMemo(() => {
     const categoriesById = new Map(categories.map((category) => [category.id, category]));
     return [
@@ -29,10 +38,12 @@ export default function SortableCategoryGroup({ id, categories, children }: Sort
       ...categories.filter((category) => !categoryOrder.includes(category.id)),
     ];
   }, [categories, categoryOrder]);
+  // 拖动组件使用的分类 ID 顺序。
   const orderedCategoryIds = useMemo(
     () => orderedCategories.map((category) => category.id),
     [orderedCategories],
   );
+  // 启用鼠标和键盘两种分类排序操作方式。
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -47,14 +58,16 @@ export default function SortableCategoryGroup({ id, categories, children }: Sort
 
     const previousOrder = categoryOrder;
     const nextIds = arrayMove(orderedCategories, oldIndex, newIndex).map((category) => category.id);
-    setCategoryOrder(nextIds);
-    setErrorMessage('');
+    setOrderState((current) => ({ ...current, categoryOrder: nextIds, errorMessage: '' }));
 
     startTransition(async () => {
       const result = await reorderCategoriesAction(nextIds);
       if (!result.success) {
-        setCategoryOrder(previousOrder);
-        setErrorMessage(result.message);
+        setOrderState((current) => ({
+          ...current,
+          categoryOrder: previousOrder,
+          errorMessage: result.message,
+        }));
       }
     });
   }

@@ -19,3 +19,14 @@ export type CategoryOption = {
   icon: string | null;
   color: string | null;
 };
+
+export type EditableTransaction = {
+  id: number;
+  type: TransactionType;
+  amount: number;
+  occurredAt: Date;
+  accountId: number;
+  toAccountId: number | null;
+  categoryId: number | null;
+  notes: string | null;
+};

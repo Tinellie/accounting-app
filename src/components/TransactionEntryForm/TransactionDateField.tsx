@@ -1,15 +1,19 @@
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import dayjs from 'dayjs';
 
+/**
+ * 组件：交易时间选择器
+ * 功能：让用户选择交易发生的日期和具体时间。
+ */
 type TransactionDateFieldProps = {
   occurredAt: string;
   onDateChange: (occurredAt: string) => void;
+  fieldId?: string;
 };
 
 // 选择交易发生时间，并提交转换后的标准日期值。
-export default function TransactionDateField({ occurredAt, onDateChange }: TransactionDateFieldProps) {
+export default function TransactionDateField({ occurredAt, onDateChange, fieldId = 'txn-date' }: TransactionDateFieldProps) {
   return (
     <>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -21,12 +25,10 @@ export default function TransactionDateField({ occurredAt, onDateChange }: Trans
           views={['year', 'month', 'day', 'hours', 'minutes', 'seconds']}
           openTo="day"
           ampm={false}
-          slotProps={{
-            textField: { id: 'txn-date', required: true, fullWidth: true, size: 'small' },
-          }}
+          slotProps={{ textField: { id: fieldId, required: true, fullWidth: true, size: 'small' } }}
         />
       </LocalizationProvider>
-      <input id="txn-date-value" type="hidden" name="occurredAt" value={occurredAt} />
+      <input id={`${fieldId}-value`} type="hidden" name="occurredAt" value={occurredAt} />
     </>
   );
 }

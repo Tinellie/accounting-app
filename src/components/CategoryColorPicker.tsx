@@ -1,11 +1,11 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Box, Button, Stack, Tooltip, Typography } from '@mui/material';
 import PaletteIcon from '@mui/icons-material/Palette';
 import { categoryColorPalette } from '@/src/lib/category-colors';
 
+/**
+ * 组件：分类颜色选择器
+ * 功能：让用户为分类选择颜色，或使用自动分配/跟随上级分类的颜色。
+ */
 type CategoryColorPickerProps = {
   color: string | null;
   hasParent: boolean;

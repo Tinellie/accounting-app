@@ -1,20 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Avatar from '@mui/material/Avatar';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { Avatar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Radio, RadioGroup, Stack, Typography } from '@mui/material';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
 
+/**
+ * 组件：账户图标选择器
+ * 功能：展示当前账户图标，并让用户从预置图标中挑选一个。
+ */
 type AccountIconPickerProps = {
   icons: string[];
   value: string;
@@ -22,6 +15,7 @@ type AccountIconPickerProps = {
 };
 
 export default function AccountIconPicker({ icons, value, onChange }: AccountIconPickerProps) {
+  // 控制预置账户图标选择窗口的开关。
   const [isOpen, setIsOpen] = useState(false);
 
   function selectIcon(icon: string) {

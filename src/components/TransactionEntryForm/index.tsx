@@ -1,13 +1,9 @@
 'use client';
 
 import { startTransition, useActionState, useEffect, useState } from 'react';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import { createTransactionAction } from '@/app/transactions/actions';
+import { Alert, Box, Paper, Stack, TextField, Typography } from '@mui/material';
+import { createTransactionAction, updateTransactionAction } from '@/app/transactions/actions';
+import { formatMinorUnits } from '@/src/lib/money';
 import SourceAccountField from './SourceAccountField';
 import TransactionAmountFields from './TransactionAmountFields';
 import TransactionDateField from './TransactionDateField';
@@ -15,30 +11,66 @@ import TransactionDetailField from './TransactionDetailField';
 import TransactionImportActions from '@/src/components/TransactionImportActions';
 import TransactionSubmitButton from './TransactionSubmitButton';
 import TransactionTypeSelector from './TransactionTypeSelector';
-import type { CategoryOption, TransactionType, AccountOption } from './types';
+import type { CategoryOption, TransactionType, AccountOption, EditableTransaction } from './types';
 
+/**
+ * 组件：交易录入表单
+ * 功能：供用户新增或修改支出、收入和转账记录。
+ * 用户可以填写金额、时间、账户、分类和备注，也可以导入交易截图。
+ */
 type TransactionEntryFormProps = {
   accounts: AccountOption[];
   categories: CategoryOption[];
+  initialTransaction?: EditableTransaction;
+  onSaved?: () => void;
 };
 
 const initialActionState = { success: false, message: '' };
 
 // 管理表单状态，并组合各个交易录入子组件。
-export default function TransactionEntryForm({ accounts, categories }: TransactionEntryFormProps) {
-  const [type, setType] = useState<TransactionType>('expense');
-  const [categoryId, setCategoryId] = useState('');
-  const [sourceAccountId, setSourceAccountId] = useState('');
-  const [destinationAccountId, setDestinationAccountId] = useState('');
-  const [occurredAt, setOccurredAt] = useState('');
-  const [state, formAction, isPending] = useActionState(createTransactionAction, initialActionState);
+export default function TransactionEntryForm({
+  accounts,
+  categories,
+  initialTransaction,
+  onSaved,
+}: TransactionEntryFormProps) {
+  // 区分新增与编辑模式，影响表单默认值和提交后的行为。
+  const isEditing = initialTransaction !== undefined;
+  // 为编辑表单生成独立字段 ID，新增表单使用统一前缀。
+  const fieldIdPrefix = isEditing ? `txn-edit-${initialTransaction.id}` : 'txn';
+  // 当前表单元素的 ID。
+  const formId = isEditing ? `${fieldIdPrefix}-entry` : 'txn-entry';
+  // type/categoryId/sourceAccountId/destinationAccountId/occurredAt 分别记录交易类型、分类、转出账户、转入账户和发生时间。
+  const [formValues, setFormValues] = useState(() => ({
+    type: initialTransaction?.type ?? 'expense' as TransactionType,
+    categoryId: String(initialTransaction?.categoryId ?? ''),
+    sourceAccountId: String(initialTransaction?.accountId ?? ''),
+    destinationAccountId: String(initialTransaction?.toAccountId ?? ''),
+    occurredAt: initialTransaction?.occurredAt.toISOString() ?? '',
+  }));
+  const { type, categoryId, sourceAccountId, destinationAccountId, occurredAt } = formValues;
+  // 根据新增/编辑模式选择对应的保存操作。
+  const action = isEditing ? updateTransactionAction : createTransactionAction;
+  // 保存结果、提交函数和当前是否正在保存。
+  const [state, formAction, isPending] = useActionState(action, initialActionState);
+  // 只显示与当前支出、收入或转账类型相符的分类。
   const filteredCategories = categories.filter((category) => category.type === type);
 
   useEffect(() => {
-    startTransition(() => setOccurredAt(new Date().toISOString()));
-  }, [setOccurredAt]);
+    if (isEditing) return;
+    startTransition(() => setFormValues((current) => ({
+      ...current,
+      occurredAt: new Date().toISOString(),
+    })));
+  }, [isEditing]);
 
   useEffect(() => {
+    if (isEditing && state.success) onSaved?.();
+  }, [isEditing, onSaved, state.success]);
+
+  useEffect(() => {
+    if (isEditing) return;
+
     function handleTransactionShortcut(event: KeyboardEvent) {
       if (event.key === 'Enter' && event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing) {
         const target = event.target;
@@ -91,26 +123,27 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
       if (!nextType) return;
 
       event.preventDefault();
-      setType(nextType);
-      setCategoryId('');
-      setDestinationAccountId('');
+      changeType(nextType);
     }
 
     document.addEventListener('keydown', handleTransactionShortcut);
     return () => document.removeEventListener('keydown', handleTransactionShortcut);
-  }, []);
+  }, [isEditing]);
 
   function changeType(nextType: TransactionType) {
-    setType(nextType);
-    setCategoryId('');
-    setDestinationAccountId('');
+    setFormValues((current) => ({
+      ...current,
+      type: nextType,
+      categoryId: '',
+      destinationAccountId: '',
+    }));
   }
 
   return (
     <Stack spacing={2.5}>
-      <TransactionImportActions accounts={accounts} categories={categories} />
+      {!isEditing ? <TransactionImportActions accounts={accounts} categories={categories} /> : null}
       <Paper
-        id="txn-form"
+        id={isEditing ? `${fieldIdPrefix}-form` : 'txn-form'}
         component="section"
         variant="outlined"
         sx={(theme) => ({
@@ -122,7 +155,9 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
       >
         <Stack className="txn-form-content" spacing={2.5}>
         {/* 表单标题 */}
-        <Typography id="txn-form-title" component="h2" variant="h2">记一笔</Typography>
+        <Typography id={isEditing ? `${fieldIdPrefix}-title` : 'txn-form-title'} component="h2" variant="h2">
+          {isEditing ? '编辑交易' : '记一笔'}
+        </Typography>
 
         {/* 没有可用账户时提示用户先创建账户 */}
         {accounts.length === 0 ? (
@@ -137,14 +172,15 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
         ) : null}
 
         {/* 收集交易信息并交给服务端保存 */}
-        <Box id="txn-entry" component="form" action={formAction}>
+        <Box id={formId} component="form" action={formAction}>
+          {initialTransaction ? <input type="hidden" name="id" value={initialTransaction.id} /> : null}
           <Stack className="txn-entry-fields" spacing={2}>
             {/* 选择支出、收入或转账 */}
-            <TransactionTypeSelector type={type} onTypeChange={changeType} />
+            <TransactionTypeSelector type={type} onTypeChange={changeType} fieldId={`${fieldIdPrefix}-type`} />
 
             {/* 交易的时间、账户、金额和备注等输入项 */}
             <Box
-              id="txn-fields"
+                id={`${fieldIdPrefix}-fields`}
               sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
@@ -152,11 +188,15 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
               }}
             >
               <Box sx={{ gridColumn: '1 / -1' }}>
-                <TransactionDateField occurredAt={occurredAt} onDateChange={setOccurredAt} />
+                <TransactionDateField
+                  occurredAt={occurredAt}
+                  onDateChange={(occurredAt) => setFormValues((current) => ({ ...current, occurredAt }))}
+                  fieldId={`${fieldIdPrefix}-date`}
+                />
               </Box>
 
               <Box
-                id="txn-account-row"
+                id={`${fieldIdPrefix}-account-row`}
                 sx={{
                   gridColumn: '1 / -1',
                   display: 'grid',
@@ -171,7 +211,8 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
                   accounts={accounts}
                   type={type}
                   sourceAccountId={sourceAccountId}
-                  onAccountChange={setSourceAccountId}
+                  onAccountChange={(sourceAccountId) => setFormValues((current) => ({ ...current, sourceAccountId }))}
+                  fieldId={`${fieldIdPrefix}-account`}
                 />
                 {type === 'transfer' ? (
                   <TransactionDetailField
@@ -181,8 +222,9 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
                     sourceAccountId={sourceAccountId}
                     categoryId={categoryId}
                     destinationAccountId={destinationAccountId}
-                    onCategoryChange={setCategoryId}
-                    onDestinationChange={setDestinationAccountId}
+                    onCategoryChange={(categoryId) => setFormValues((current) => ({ ...current, categoryId }))}
+                    onDestinationChange={(destinationAccountId) => setFormValues((current) => ({ ...current, destinationAccountId }))}
+                    fieldId={`${fieldIdPrefix}-detail`}
                   />
                 ) : null}
               </Box>
@@ -195,23 +237,28 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
                   sourceAccountId={sourceAccountId}
                   categoryId={categoryId}
                   destinationAccountId={destinationAccountId}
-                  onCategoryChange={setCategoryId}
-                  onDestinationChange={setDestinationAccountId}
+                  onCategoryChange={(categoryId) => setFormValues((current) => ({ ...current, categoryId }))}
+                  onDestinationChange={(destinationAccountId) => setFormValues((current) => ({ ...current, destinationAccountId }))}
+                  fieldId={`${fieldIdPrefix}-detail`}
                 />
               ) : null}
 
               <Box sx={{ gridColumn: type === 'transfer' ? '1 / -1' : undefined }}>
-                <TransactionAmountFields />
+                <TransactionAmountFields
+                  fieldId={`${fieldIdPrefix}-amount`}
+                  initialValue={initialTransaction ? formatMinorUnits(initialTransaction.amount) : undefined}
+                />
               </Box>
 
               <TextField
-                id="txn-notes"
+                id={`${fieldIdPrefix}-notes`}
                 name="notes"
                 label="备注"
                 fullWidth
                 size="small"
                 multiline
                 minRows={3}
+                defaultValue={initialTransaction?.notes ?? ''}
                 sx={{ gridColumn: '1 / -1' }}
               />
             </Box>
@@ -220,6 +267,8 @@ export default function TransactionEntryForm({ accounts, categories }: Transacti
             <TransactionSubmitButton
               isPending={isPending}
               type={type}
+              fieldId={`${fieldIdPrefix}-submit`}
+              label={isEditing ? '保存修改' : '保存记录'}
               disabled={
                 isPending ||
                 accounts.length === 0 ||

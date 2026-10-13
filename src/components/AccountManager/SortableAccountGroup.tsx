@@ -1,12 +1,8 @@
 'use client';
 
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
+import { Alert, Box, IconButton, Stack, Tooltip } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -20,6 +16,10 @@ import { reorderAccountsAction } from '@/app/accounts/actions';
 import AccountCard from './AccountCard';
 import type { AccountRecord } from './types';
 
+/**
+ * 组件：可排序账户分组
+ * 功能：展示同一类型的账户，并让用户拖动账户调整显示顺序。
+ */
 type SortableAccountGroupProps = {
   accounts: AccountRecord[];
   accountType: AccountRecord['type'];
@@ -34,9 +34,15 @@ type SortableAccountItemProps = {
 };
 
 export default function SortableAccountGroup({ accounts, accountType, isArchived, onEdit }: SortableAccountGroupProps) {
-  const [accountOrder, setAccountOrder] = useState(() => accounts.map((account) => account.id));
-  const [errorMessage, setErrorMessage] = useState('');
+  // 当前账户顺序及保存失败提示属于同一次排序操作。
+  const [orderState, setOrderState] = useState(() => ({
+    accountOrder: accounts.map((account) => account.id),
+    errorMessage: '',
+  }));
+  const { accountOrder, errorMessage } = orderState;
+  // 标记账户顺序是否正在保存。
   const [isPending, startTransition] = useTransition();
+  // 按用户保存的顺序排列账户，并把新出现的账户插入合适位置。
   const orderedAccounts = useMemo(() => {
     const accountsById = new Map(accounts.map((account) => [account.id, account]));
     const ordered = accountOrder.flatMap((id) => {
@@ -53,11 +59,13 @@ export default function SortableAccountGroup({ accounts, accountType, isArchived
 
     return ordered;
   }, [accounts, accountOrder]);
+  // 拖动组件使用的账户 ID 顺序。
   const orderedAccountIds = useMemo(
     () => orderedAccounts.map((account) => account.id),
     [orderedAccounts],
   );
 
+  // 启用鼠标和键盘两种账户排序操作方式。
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -72,14 +80,16 @@ export default function SortableAccountGroup({ accounts, accountType, isArchived
 
     const previousOrder = accountOrder;
     const nextIds = arrayMove(orderedAccounts, oldIndex, newIndex).map((account) => account.id);
-    setAccountOrder(nextIds);
-    setErrorMessage('');
+    setOrderState((current) => ({ ...current, accountOrder: nextIds, errorMessage: '' }));
 
     startTransition(async () => {
       const result = await reorderAccountsAction(nextIds, isArchived, accountType);
       if (!result.success) {
-        setAccountOrder(previousOrder);
-        setErrorMessage(result.message);
+        setOrderState((current) => ({
+          ...current,
+          accountOrder: previousOrder,
+          errorMessage: result.message,
+        }));
       }
     });
   }
