@@ -5,8 +5,155 @@ import sharp from 'sharp';
 import { fieldErrors, joinBoxes, parseAmount, parseDate, parseHeader, partitionFields } from '../src/lib/wechat-import/parse.ts';
 import { prepareSlice, splitScreenshot } from '../src/lib/wechat-import/image.ts';
 import { readImportStream } from '../src/lib/wechat-import/stream.ts';
+import {
+  AI_CATEGORY_CONFIDENCE_THRESHOLD,
+  buildCategoryRequest,
+  classifyCategories,
+  validateCategoryResponse,
+} from '../src/lib/wechat-import/ai-category.ts';
 
 const box = (text, bounds, confidence = 0.99) => ({ text, box: bounds, confidence });
+const aiCategories = [
+  { id: 1, name: '餐饮', type: 'expense', parentId: null, code: 'food', sortOrder: 0, icon: 'Restaurant', color: '#ff0000' },
+  { id: 2, name: '午餐', type: 'expense', parentId: 1, code: 'lunch', sortOrder: 0, icon: null, color: null },
+  { id: 3, name: '工资', type: 'income', parentId: null, code: 'salary', sortOrder: 0, icon: null, color: null },
+];
+const aiTransactions = [
+  { id: -2, type: 'expense', notes: '虚构测试：午餐' },
+  { id: -3, type: 'income', notes: '虚构测试：工资' },
+];
+const aiRow = (transactionId = -2, categoryId = 2, confidence = 0.9) => ({
+  transactionId, categoryId, confidence, explanation: '虚构交易的分类理由',
+});
+
+function fakeDeepSeekKey(context) {
+  const previous = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-secret-not-a-real-key';
+  context.after(() => {
+    if (previous === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = previous;
+  });
+}
+
+test('AI request includes complete category hierarchy and descriptions, never amounts/dates/accounts', () => {
+  const payload = buildCategoryRequest(aiCategories, aiTransactions.map((row) => ({
+    ...row, amount: 123, occurredAt: 'private-date', accountName: 'private-account', importDebug: 'private-ocr',
+  })));
+  assert.equal(payload.categories.length, 3);
+  assert.equal(payload.categories[1].parentId, 1);
+  assert.deepEqual(Object.keys(payload.transactions[0]).sort(), ['description', 'transactionId', 'type']);
+  assert.equal(payload.transactions[0].description, aiTransactions[0].notes);
+  assert.ok(!JSON.stringify(payload).includes('private-'));
+});
+
+test('AI results match by ID and apply valid child categories; threshold is strictly below 0.5', () => {
+  assert.equal(AI_CATEGORY_CONFIDENCE_THRESHOLD, 0.5);
+  const result = validateCategoryResponse({ results: [aiRow(-3, 3, 0.5), aiRow(-2, 2, 0.499)] }, aiCategories, aiTransactions);
+  assert.deepEqual(result.map(({ status }) => status), ['warning', 'success']);
+  assert.deepEqual(result.map(({ categoryId }) => categoryId), [2, 3]);
+  assert.equal(result[0].confidence, 0.499);
+  assert.deepEqual(result[0].rawResponse, aiRow(-2, 2, 0.499));
+  const zero = validateCategoryResponse({ results: [aiRow(-2, 2, 0)] }, aiCategories, [aiTransactions[0]]);
+  assert.equal(zero[0].status, 'warning');
+  assert.equal(zero[0].categoryId, 2);
+});
+
+test('AI rejects malformed batches, unknown IDs, duplicates and missing rows without positional guessing', () => {
+  for (const raw of ['not JSON', {}, { results: null }, { results: [aiRow(999)] }, { results: [{ categoryId: 1 }] }]) {
+    const result = validateCategoryResponse(raw, aiCategories, aiTransactions);
+    assert.ok(result.every((row) => row.status === 'error' && row.categoryId === null));
+    assert.deepEqual(result[0].rawResponse, raw);
+  }
+  const duplicate = validateCategoryResponse({ results: [aiRow(), aiRow(), aiRow(-3, 3)] }, aiCategories, aiTransactions);
+  assert.equal(duplicate[0].status, 'error');
+  assert.equal(duplicate[1].status, 'success');
+  const missing = validateCategoryResponse({ results: [aiRow()] }, aiCategories, aiTransactions);
+  assert.equal(missing[0].status, 'success');
+  assert.equal(missing[1].status, 'error');
+});
+
+test('AI rejects nonexistent/wrong-direction categories and invalid confidence/explanations', () => {
+  for (const patch of [
+    { categoryId: 999 }, { categoryId: 3 }, { categoryId: '2' },
+    { confidence: -0.1 }, { confidence: 1.1 }, { confidence: '0.9' },
+    { explanation: '' }, { explanation: '  ' }, { explanation: null },
+  ]) {
+    const raw = { ...aiRow(), ...patch };
+    const result = validateCategoryResponse({ results: [raw] }, aiCategories, [aiTransactions[0]])[0];
+    assert.equal(result.status, 'error', JSON.stringify(patch));
+    assert.equal(result.categoryId, null);
+    assert.deepEqual(result.rawResponse, raw);
+  }
+  for (const patch of [{ type: null }, { notes: null }, { notes: ' ' }]) {
+    const result = validateCategoryResponse({ results: [aiRow()] }, aiCategories, [{ ...aiTransactions[0], ...patch }])[0];
+    assert.equal(result.status, 'error');
+  }
+});
+
+test('DeepSeek client uses JSON mode and returns validated categories', async (context) => {
+  fakeDeepSeekKey(context);
+  context.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://api.deepseek.com/chat/completions');
+    const body = JSON.parse(options.body);
+    assert.equal(body.response_format.type, 'json_object');
+    assert.equal(body.thinking.type, 'disabled');
+    assert.deepEqual(JSON.parse(body.messages[1].content), buildCategoryRequest(aiCategories, aiTransactions));
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ results: [aiRow(), aiRow(-3, 3)] }) } }] });
+  });
+  const result = await classifyCategories(aiCategories, aiTransactions, new AbortController().signal);
+  assert.ok(result.every((row) => row.status === 'success'));
+});
+
+test('DeepSeek client explicitly reports HTTP errors and redacts the API key from raw feedback', async (context) => {
+  fakeDeepSeekKey(context);
+  context.mock.method(globalThis, 'fetch', async () => Response.json(
+    { error: { message: `Rejected ${process.env.DEEPSEEK_API_KEY}` } }, { status: 401 },
+  ));
+  const result = await classifyCategories(aiCategories, aiTransactions, new AbortController().signal);
+  assert.equal(result[0].status, 'error');
+  assert.match(result[0].errors[0], /401/);
+  assert.ok(!JSON.stringify(result).includes(process.env.DEEPSEEK_API_KEY));
+  assert.match(JSON.stringify(result[0].rawResponse), /REDACTED/);
+});
+
+test('DeepSeek client reports malformed JSON and truncated completions, preserving raw data', async (context) => {
+  fakeDeepSeekKey(context);
+  for (const response of [
+    'bad API envelope',
+    { choices: [{ finish_reason: 'length', message: { content: '{"results":[' } }] },
+    { choices: [{ finish_reason: 'stop', message: { content: 'not JSON content' } }] },
+  ]) {
+    const mock = context.mock.method(globalThis, 'fetch', async () => new Response(typeof response === 'string' ? response : JSON.stringify(response)));
+    const result = await classifyCategories(aiCategories, aiTransactions, new AbortController().signal);
+    assert.ok(result.every((row) => row.status === 'error'));
+    assert.ok(result[0].rawResponse);
+    mock.mock.restore();
+  }
+});
+
+test('DeepSeek network errors preserve OCR preview feedback, but cancellation propagates', async (context) => {
+  fakeDeepSeekKey(context);
+  const mock = context.mock.method(globalThis, 'fetch', async () => { throw new DOMException('timeout', 'TimeoutError'); });
+  const result = await classifyCategories(aiCategories, aiTransactions, new AbortController().signal);
+  assert.ok(result.every((row) => row.status === 'error' && row.rawResponse === null));
+  mock.mock.restore();
+  context.mock.method(globalThis, 'fetch', async (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+  }));
+  const abort = new AbortController();
+  const pending = classifyCategories(aiCategories, aiTransactions, abort.signal);
+  abort.abort();
+  await assert.rejects(pending, /abort/i);
+});
+
+test('missing DeepSeek key makes no external request and produces explicit per-row errors', async (context) => {
+  fakeDeepSeekKey(context);
+  delete process.env.DEEPSEEK_API_KEY;
+  const fetchMock = context.mock.method(globalThis, 'fetch', () => { throw new Error('Must not call'); });
+  const result = await classifyCategories(aiCategories, aiTransactions, new AbortController().signal);
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.ok(result.every((row) => row.status === 'error' && row.errors[0].includes('DEEPSEEK_API_KEY')));
+});
 
 test('stream parser delivers progress before result and handles fragmented UTF-8', async () => {
   const progress = { stage: 'ocr', status: 'running', completed: 1, total: 10, message: '第一行识别完成' };

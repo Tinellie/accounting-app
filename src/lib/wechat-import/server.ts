@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import { prepareSlice, splitScreenshot } from './image';
 import { fieldErrors, joinBoxes, parseAmount, parseDate, parseHeader, partitionFields } from './parse';
+import { classifyCategories } from './ai-category';
 import type { ImportDebug, ImportProgress, ImportResult, ImportTransaction, OcrBox } from './types';
 import type { CategoryOption } from '@/src/components/TransactionEntryForm/types';
 
@@ -202,6 +203,30 @@ export async function importScreenshot(
   if (!transactions.length) throw new ImportError('没有检测到交易行，请选择包含完整交易和年月标题的微信账单截图', 422);
   onProgress?.({ stage: 'parse', status: 'complete', completed: transactions.length, total: transactionTotal, message: '年月关联、金额日期校验及默认分类已完成' });
   onProgress?.({ stage: 'retry', status: 'complete', completed: retried, total: retried, message: retried ? `已完成 ${retried} 次灰度重试` : '金额日期均通过校验，无需重试' });
+  signal.throwIfAborted();
+  onProgress?.({ stage: 'ai-category', status: 'running', completed: 0, total: transactionTotal, message: '正在向 DeepSeek 发送完整分类列表和交易描述，等待 AI 分类' });
+  const classifications = await classifyCategories(categories, transactions, signal);
+  let aiErrors = 0;
+  let aiWarnings = 0;
+  transactions.forEach((transaction, index) => {
+    const feedback = classifications[index];
+    transaction.aiCategory = feedback;
+    if (feedback.status === 'error') {
+      aiErrors++;
+    } else {
+      if (feedback.status === 'warning') aiWarnings++;
+      const category = categories.find((category) => category.id === feedback.categoryId);
+      if (!category) throw new ImportError('AI 分类校验后分类丢失，请重试', 500);
+      transaction.categoryId = category.id;
+      transaction.categoryName = category.name;
+      transaction.categoryIcon = category.icon;
+      transaction.categoryColor = category.color;
+      transaction.categoryParentId = category.parentId;
+      transaction.categoryParentColor = categories.find((parent) => parent.id === category.parentId)?.color ?? null;
+    }
+    onProgress?.({ stage: 'ai-category', status: 'running', completed: index + 1, total: transactionTotal, message: `第 ${transaction.importDebug.sequence} 行 AI 分类${feedback.status === 'error' ? '无效，保留原分类' : feedback.status === 'warning' ? '置信度低，已应用建议并标记警告' : '校验通过'}` });
+  });
+  onProgress?.({ stage: 'ai-category', status: 'complete', completed: transactionTotal, total: transactionTotal, message: `AI 分类处理结束：${aiErrors} 笔错误、${aiWarnings} 笔低置信度，请查看各行提示` });
   const output: ImportResult = { batchId, transactions, headers };
   signal.throwIfAborted();
   onProgress?.({ stage: 'save', status: 'running', completed: 0, total: 1, message: '正在保存调试对象并准备预览（不写入交易数据库）' });

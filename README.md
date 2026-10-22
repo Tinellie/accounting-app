@@ -90,7 +90,47 @@ The app is reverse-proxied by Caddy at `http://localhost`.
 On the transactions page, choose **从微信截图导入**, then select a JPG, PNG, or
 WebP screenshot (up to 20 MB). Recognition runs locally using PaddleOCR
 PP-OCRv5 server detection/recognition models, supporting Chinese, English,
-and digits. Screenshots are not sent to a third-party OCR API.
+and digits. Screenshots are not sent to a third-party OCR API. After OCR,
+automatic category recognition sends the complete category list and each row's
+description, income/expense type, and temporary transaction ID to DeepSeek.
+Images, amounts, dates, account information, and raw OCR boxes are not sent.
+
+### DeepSeek automatic categories
+
+No additional npm packages are required: the server uses native `fetch` and Zod.
+Set these server-only variables in `.env.local`, then restart Next.js:
+
+```dotenv
+DEEPSEEK_API_KEY=your-api-key
+DEEPSEEK_MODEL=deepseek-flash
+```
+
+The default model is `deepseek-flash`; the endpoint is
+`https://api.deepseek.com/chat/completions`. Do not use `NEXT_PUBLIC_` for secrets.
+For Docker Compose, provide the same variables via the shell or Compose `.env`
+file (Compose does not automatically load Next.js `.env.local`).
+
+The service makes one batch request with the complete category list (including
+parent IDs and income/expense types) and all recognized transaction descriptions.
+It requests JSON containing one `transactionId`, `categoryId`, `confidence`
+(0–1), and Chinese `explanation` per transaction. Results are matched by ID,
+not output order. Parent and child categories are both eligible, but must match
+the transaction's income/expense direction.
+
+Valid results replace the initial default category, including low-confidence
+results. Confidence **strictly below 0.5** shows a yellow warning and the original
+returned row. Invalid responses, missing/duplicate/unknown transaction IDs,
+unknown or wrong-direction categories, invalid confidence/explanation, API errors,
+timeouts, and missing API keys show red errors and available raw response data,
+while preserving the initial category and OCR preview. Confidence is model-reported,
+not a calibrated probability. No AI output is written to the transaction database.
+
+AI feedback is independent of `showDebugData`: red/yellow alerts and their raw
+AI data remain visible even when original OCR images/objects are hidden.
+Confidence and explanations appear left-aligned within each transaction item.
+Results are saved alongside
+OCR debug data in the batch `result.json`. Cancelling the import aborts an active
+DeepSeek request. The processing progress panel includes the AI classification step.
 
 ### Local OCR service (Windows, Python 3.10)
 
@@ -134,7 +174,8 @@ cached in the `wechat_ocr_models` volume.
   screenshot order, regardless of asynchronous OCR completion order. Dates use
   Chinese local time (`UTC+08:00`); amounts use integer minor units.
 - Choose the first top-level category of the corresponding income/expense type,
-  ordered by `sortOrder`, then name, matching existing transaction operations.
+  ordered by `sortOrder`, then name, as the initial category; subsequently apply
+  validated DeepSeek category recommendations as described above.
 - Missing/invalid amounts, signs, dates, or year headers remain `null`, with
   explicit red errors. No zero-amount/current-date substitutes are generated.
 - The shared transactions list runs in read-only preview mode. Its optional
@@ -145,7 +186,7 @@ cached in the `wechat_ocr_models` volume.
   modified, and database edit/delete actions are unavailable.
 - During processing, the dialog receives live step updates from the server:
   service readiness, slicing, preprocessing, first-pass OCR, transaction parsing,
-  grayscale retries, and preview preparation. Row counters reflect completed work,
+  grayscale retries, DeepSeek category recognition, and preview preparation. Row counters reflect completed work,
   including month headers in the slicing/OCR totals. Retries show completed counts
   rather than an estimated percentage while their total is still being discovered.
 

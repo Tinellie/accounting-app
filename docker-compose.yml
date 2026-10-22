@@ -7,6 +7,8 @@ services:
       DATABASE_URL: /app/data/app.db
       NODE_ENV: production
       WECHAT_OCR_URL: http://wechat-ocr:8765
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
     volumes:
       - sqlite_data:/app/data
       - ./data/icons-preset:/app/data/icons-preset:ro

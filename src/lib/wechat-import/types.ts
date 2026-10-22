@@ -40,6 +40,16 @@ export type PreviewTransaction = Omit<TransactionListItemData, 'amount' | 'occur
   type: 'expense' | 'income' | null;
   accountId: null;
   importDebug: ImportDebug;
+  aiCategory?: AiCategoryFeedback;
+};
+
+export type AiCategoryFeedback = {
+  status: 'success' | 'warning' | 'error';
+  categoryId: number | null;
+  confidence: number | null;
+  explanation: string | null;
+  errors: string[];
+  rawResponse: unknown;
 };
 
 export type ImportTransaction = Omit<PreviewTransaction, 'occurredAt'> & {
@@ -52,7 +62,7 @@ export type ImportResult = {
   headers: { sequence: number; text: string; year: number | null; month: number | null; boxes: OcrBox[] }[];
 };
 
-export type ImportStage = 'health' | 'split' | 'preprocess' | 'ocr' | 'parse' | 'retry' | 'save';
+export type ImportStage = 'health' | 'split' | 'preprocess' | 'ocr' | 'parse' | 'retry' | 'ai-category' | 'save';
 
 export type ImportProgress = {
   stage: ImportStage;

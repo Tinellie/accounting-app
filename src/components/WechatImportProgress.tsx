@@ -9,6 +9,7 @@ const stages: { stage: ImportStage; label: string }[] = [
   { stage: 'ocr', label: '首次 OCR 识别' },
   { stage: 'parse', label: '交易数据整理' },
   { stage: 'retry', label: '失败字段灰度重试' },
+  { stage: 'ai-category', label: 'DeepSeek AI 自动分类' },
   { stage: 'save', label: '生成预览' },
 ];
 

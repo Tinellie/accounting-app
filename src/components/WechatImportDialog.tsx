@@ -75,7 +75,8 @@ export default function WechatImportDialog() {
     }
   }
 
-  const invalidCount = transactions?.filter((transaction) => transaction.importDebug.errors.length > 0).length ?? 0;
+  const invalidCount = transactions?.filter((transaction) => transaction.importDebug.errors.length > 0 || transaction.aiCategory?.status === 'error').length ?? 0;
+  const warningCount = transactions?.filter((transaction) => transaction.aiCategory?.status === 'warning').length ?? 0;
   return (
     <>
       <Box>
@@ -85,7 +86,7 @@ export default function WechatImportDialog() {
         <DialogTitle>从微信截图导入</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <Alert severity="info">仅识别与预览，不会写入交易或修改账户余额。请上传包含年月标题的微信账单截图。</Alert>
+            <Alert severity="info">仅识别与预览，不会写入交易或修改账户余额。请上传包含年月标题的微信账单截图。自动分类会将完整分类列表与各行交易描述、收支类型发送给 DeepSeek，不发送截图、金额或日期。</Alert>
             <input
               ref={inputRef}
               type="file"
@@ -105,8 +106,8 @@ export default function WechatImportDialog() {
             {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
             {transactions ? (
               <>
-                <Alert severity={invalidCount ? 'warning' : 'success'}>
-                  识别出 {transactions.length} 笔交易，{invalidCount ? `${invalidCount} 笔需要检查，请确认金额、日期等识别结果。` : '金额和日期均通过格式校验，请确认识别结果。'}
+                <Alert severity={invalidCount ? 'error' : warningCount ? 'warning' : 'success'}>
+                  识别出 {transactions.length} 笔交易，{invalidCount} 笔存在识别或 AI 分类错误，{warningCount} 笔 AI 分类置信度低于 50%。请确认金额、日期和分类；AI 置信度是模型自报分数，不代表实际准确率。
                 </Alert>
                 <TransactionsList mode="preview" transactions={transactions} showDebugData={false} />
               </>

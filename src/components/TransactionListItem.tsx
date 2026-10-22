@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react';
 import Image from 'next/image';
-import { Alert, Box, Checkbox, Collapse, IconButton, Typography } from '@mui/material';
+import { Alert, AlertTitle, Box, Checkbox, Collapse, IconButton, Typography } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
@@ -49,6 +49,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
   const [imageFailed, setImageFailed] = useState(false);
   const detailsId = useId();
   const debug = 'importDebug' in transaction ? transaction.importDebug : null;
+  const aiCategory = 'aiCategory' in transaction ? transaction.aiCategory : undefined;
   // 当前交易类型对应的显示名称和颜色。
   const display = transaction.type ? transactionDisplay[transaction.type] : { label: '待识别', color: 'error.main' };
   // 标记转账记录，以调整列表中账户信息的展示。
@@ -67,7 +68,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
     : amountForDisplay !== null && amountForDisplay < 0 ? '−' : amountForDisplay !== null && amountForDisplay > 0 ? '+' : '';
 
   return (
-    <Box sx={debug?.errors.length ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
+    <Box sx={debug?.errors.length || aiCategory?.status === 'error' ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
       {debug && showDebugData ? (
         <>
           {imageFailed ? <Alert severity="error">原始切图加载失败，文件可能已被清理：{debug.sourcePath}</Alert> : (
@@ -84,6 +85,16 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         </>
       ) : null}
       {debug?.errors.length ? <Alert severity="error" sx={{ mt: 1 }}>{debug.errors.join('；')}</Alert> : null}
+      {aiCategory && aiCategory.status !== 'success' ? (
+          <Alert severity={aiCategory.status === 'error' ? 'error' : 'warning'} sx={{ mt: 1, '& .MuiAlert-message': { minWidth: 0, width: '100%' } }}>
+            <AlertTitle>{aiCategory.status === 'error' ? 'AI 分类返回错误，已保留原分类' : 'AI 分类置信度低于 50%，已应用推荐分类'}</AlertTitle>
+            {aiCategory.errors.length ? <Typography variant="body2">{aiCategory.errors.join('；')}</Typography> : null}
+            <Typography variant="caption">AI 原始返回数据{aiCategory.rawResponse === null ? '（未收到返回）' : ''}</Typography>
+            <Box component="pre" sx={{ my: 0.5, p: 1, fontSize: 12, maxHeight: 240, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', bgcolor: 'action.hover' }}>
+              {typeof aiCategory.rawResponse === 'string' ? aiCategory.rawResponse : JSON.stringify(aiCategory.rawResponse, null, 2)}
+            </Box>
+          </Alert>
+      ) : null}
     <Box
       className="txn-item"
       sx={{
@@ -94,7 +105,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         },
         alignItems: 'center',
         columnGap: { xs: 0.75, md: 1.25 },
-        rowGap: { xs: 1.5, md: 3 },
+        rowGap: aiCategory ? 0.5 : { xs: 1.5, md: 3 },
         py: 2,
       }}
     >
@@ -205,6 +216,20 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           {amountForDisplay === null ? '金额待修正' : `${sign}${transaction.currency} ${formatMinorUnits(Math.abs(amountForDisplay))}`}
         </Typography>
       </Box>
+      {aiCategory && (aiCategory.confidence !== null || aiCategory.explanation) ? (
+        <Box sx={{ gridColumn: '3 / -1', gridRow: { xs: 4, md: 2 }, minWidth: 0, justifySelf: 'stretch', textAlign: 'left', overflowWrap: 'anywhere' }}>
+          {aiCategory.confidence !== null ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              AI 分类置信度：{(aiCategory.confidence * 100).toFixed(1)}%
+            </Typography>
+          ) : null}
+          {aiCategory.explanation ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              说明：{aiCategory.explanation}
+            </Typography>
+          ) : null}
+        </Box>
+      ) : null}
     </Box>
       {debug && showDebugData ? (
         <>
