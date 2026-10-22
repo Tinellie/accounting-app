@@ -8,7 +8,6 @@ import SourceAccountField from './SourceAccountField';
 import TransactionAmountFields from './TransactionAmountFields';
 import TransactionDateField from './TransactionDateField';
 import TransactionDetailField from './TransactionDetailField';
-import TransactionImportActions from '@/src/components/TransactionImportActions';
 import TransactionSubmitButton from './TransactionSubmitButton';
 import TransactionTypeSelector from './TransactionTypeSelector';
 import type { CategoryOption, TransactionType, AccountOption, EditableTransaction } from './types';
@@ -16,7 +15,7 @@ import type { CategoryOption, TransactionType, AccountOption, EditableTransactio
 /**
  * 组件：交易录入表单
  * 功能：供用户新增或修改支出、收入和转账记录。
- * 用户可以填写金额、时间、账户、分类和备注，也可以导入交易截图。
+ * 用户可以填写金额、时间、账户、分类和备注。
  */
 type TransactionEntryFormProps = {
   accounts: AccountOption[];
@@ -141,7 +140,6 @@ export default function TransactionEntryForm({
 
   return (
     <Stack spacing={2.5}>
-      {!isEditing ? <TransactionImportActions accounts={accounts} categories={categories} /> : null}
       <Paper
         id={isEditing ? `${fieldIdPrefix}-form` : 'txn-form'}
         component="section"

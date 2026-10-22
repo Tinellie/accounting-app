@@ -13,9 +13,7 @@
     "db:backfill-account-codes": "node scripts/backfill-account-codes.mjs",
     "db:backfill-category-codes": "node scripts/backfill-category-codes.mjs",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "deepseek:classify": "node scripts/deepseek-classify.mjs",
-    "test:deepseek": "node --test scripts/lib/deepseek-category-classifier.test.mjs"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,9 +1,0 @@
-{
-  "transactions": [
-    { "id": "demo-001", "description": "地铁公交出行扣款" },
-    { "id": "demo-002", "description": "超市购买水果和日用品" },
-    { "id": "demo-003", "description": "每月工资到账" },
-    { "id": "demo-004", "description": "公寓月租及物业费" },
-    { "id": "demo-005", "description": "电影院电影票" }
-  ]
-}
