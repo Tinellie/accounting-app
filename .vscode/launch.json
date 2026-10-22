@@ -2,10 +2,25 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "启动开发服务器",
+      "name": "仅启动 Next.js",
       "type": "node-terminal",
       "request": "launch",
-      "command": "npm run dev"
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "启动 PaddleOCR 服务",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": ".\\.venv-wechat\\Scripts\\python.exe -m uvicorn server:app --app-dir scripts\\wechat-ocr --host 127.0.0.1 --port 8765",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "启动开发服务器",
+      "configurations": ["仅启动 Next.js", "启动 PaddleOCR 服务"],
+      "stopAll": true
     }
   ]
 }

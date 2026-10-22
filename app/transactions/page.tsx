@@ -4,6 +4,7 @@ import Stack from "@mui/material/Stack";
 import PageHeading from "@/src/components/PageHeading";
 import TransactionEntryForm from "@/src/components/TransactionEntryForm";
 import TransactionsList from "@/src/components/TransactionsList";
+import WechatImportDialog from "@/src/components/WechatImportDialog";
 import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
 
@@ -78,6 +79,7 @@ export default function TransactionsPage() {
   return (
     <Stack component="section" spacing={3.5}>
       <PageHeading eyebrow="ACTIVITY" title="交易明细" description="记录收支与账户转账，查看完整流水" />
+      <WechatImportDialog accounts={accountOptions} />
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
       <TransactionsList transactions={transactionRows} accounts={accountOptions} categories={categoryOptions} />
     </Stack>

@@ -48,6 +48,13 @@ export const transactions = sqliteTable(
   },
 );
 
+export const wechatImportBatches = sqliteTable('wechat_import_batches', {
+  batchId: text('batch_id').primaryKey(),
+  accountId: integer('account_id').notNull(),
+  transactionCount: integer('transaction_count').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+});
+
 export const tags = sqliteTable(
   'tags',
   {

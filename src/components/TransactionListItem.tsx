@@ -1,8 +1,14 @@
-import { Box, Checkbox, Typography } from '@mui/material';
+'use client';
+
+import { useId, useState } from 'react';
+import Image from 'next/image';
+import { Alert, AlertTitle, Box, Checkbox, Collapse, IconButton, Typography } from '@mui/material';
+import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
-import { transactions } from '@/src/db/schema';
+import type { transactions } from '@/src/db/schema';
 import { formatMinorUnits } from '@/src/lib/money';
+import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
 
 /**
  * 组件：交易列表项
@@ -25,9 +31,10 @@ export type TransactionListItemData = Pick<
 };
 
 type TransactionListItemProps = {
-  transaction: TransactionListItemData;
+  transaction: TransactionListItemData | PreviewTransaction;
   selected?: boolean;
   onSelectedChange?: (selected: boolean) => void;
+  showDebugData?: boolean;
 };
 
 const transactionDisplay = {
@@ -37,13 +44,18 @@ const transactionDisplay = {
   adjustment: { label: '调整', color: 'text.primary' },
 } as const;
 
-export default function TransactionListItem({ transaction, selected, onSelectedChange }: TransactionListItemProps) {
+export default function TransactionListItem({ transaction, selected, onSelectedChange, showDebugData = true }: TransactionListItemProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  const detailsId = useId();
+  const debug = 'importDebug' in transaction ? transaction.importDebug : null;
+  const aiCategory = 'aiCategory' in transaction ? transaction.aiCategory : undefined;
   // 当前交易类型对应的显示名称和颜色。
-  const display = transactionDisplay[transaction.type];
+  const display = transaction.type ? transactionDisplay[transaction.type] : { label: '待识别', color: 'error.main' };
   // 标记转账记录，以调整列表中账户信息的展示。
   const isTransfer = transaction.type === 'transfer';
   // 支出金额加负号展示，其他类型保留原方向。
-  const amountForDisplay = transaction.type === 'expense' ? -transaction.amount : transaction.amount;
+  const amountForDisplay = transaction.amount === null ? null : transaction.type === 'expense' ? -transaction.amount : transaction.amount;
   // 优先使用分类自身颜色，再回退到上级或默认颜色。
   const categoryColor = transaction.categoryColor ?? (
     transaction.categoryParentId === null
@@ -52,10 +64,37 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
   );
   // 转账和余额调整仅在金额为负数时显示负号。
   const sign = transaction.type === 'transfer' || transaction.type === 'adjustment'
-    ? transaction.amount < 0 ? '−' : ''
-    : amountForDisplay < 0 ? '−' : amountForDisplay > 0 ? '+' : '';
+    ? (transaction.amount ?? 0) < 0 ? '−' : ''
+    : amountForDisplay !== null && amountForDisplay < 0 ? '−' : amountForDisplay !== null && amountForDisplay > 0 ? '+' : '';
 
   return (
+    <Box sx={debug?.errors.length || aiCategory?.status === 'error' ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
+      {debug && showDebugData ? (
+        <>
+          {imageFailed ? <Alert severity="error">原始切图加载失败，文件可能已被清理：{debug.sourcePath}</Alert> : (
+            <Image
+              src={debug.imageUrl}
+              alt={`第 ${debug.sequence} 行原始切图`}
+              width={debug.bounds.width}
+              height={debug.bounds.height}
+              unoptimized
+              onError={() => setImageFailed(true)}
+              style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 240, objectFit: 'contain', marginTop: 12 }}
+            />
+          )}
+        </>
+      ) : null}
+      {debug?.errors.length ? <Alert severity="error" sx={{ mt: 1 }}>{debug.errors.join('；')}</Alert> : null}
+      {aiCategory && aiCategory.status !== 'success' ? (
+          <Alert severity={aiCategory.status === 'error' ? 'error' : 'warning'} sx={{ mt: 1, '& .MuiAlert-message': { minWidth: 0, width: '100%' } }}>
+            <AlertTitle>{aiCategory.status === 'error' ? 'AI 分类返回错误，已保留原分类' : 'AI 分类置信度低于 50%，已应用推荐分类'}</AlertTitle>
+            {aiCategory.errors.length ? <Typography variant="body2">{aiCategory.errors.join('；')}</Typography> : null}
+            <Typography variant="caption">AI 原始返回数据{aiCategory.rawResponse === null ? '（未收到返回）' : ''}</Typography>
+            <Box component="pre" sx={{ my: 0.5, p: 1, fontSize: 12, maxHeight: 240, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', bgcolor: 'action.hover' }}>
+              {typeof aiCategory.rawResponse === 'string' ? aiCategory.rawResponse : JSON.stringify(aiCategory.rawResponse, null, 2)}
+            </Box>
+          </Alert>
+      ) : null}
     <Box
       className="txn-item"
       sx={{
@@ -66,13 +105,14 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         },
         alignItems: 'center',
         columnGap: { xs: 0.75, md: 1.25 },
-        rowGap: { xs: 1.5, md: 3 },
+        rowGap: aiCategory ? 0.5 : { xs: 1.5, md: 3 },
         py: 2,
       }}
     >
       <Checkbox
         size="small"
-        checked={selected}
+        checked={selected ?? false}
+        disabled={!onSelectedChange}
         onChange={(event) => onSelectedChange?.(event.target.checked)}
         slotProps={{ input: { 'aria-label': `选择${display.label}记录` } }}
         sx={{
@@ -83,6 +123,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           width: 24,
           height: 24,
           p: 0,
+          visibility: debug ? 'hidden' : 'visible',
         }}
       />
       {transaction.categoryName || isTransfer ? (
@@ -119,7 +160,9 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           ) : ' · 未分类'}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(transaction.occurredAt)}
+          {transaction.occurredAt
+            ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', ...(debug ? { timeZone: 'Asia/Shanghai' } : {}) }).format(transaction.occurredAt)
+            : <Box component="span" sx={{ color: 'error.main' }}>日期待修正</Box>}
         </Typography>
       </Box>
       {transaction.notes ? (
@@ -129,7 +172,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           sx={{
             gridColumn: { xs: '3 / -1', md: 4 },
             gridRow: { xs: 3, md: 1 },
-            display: { xs: 'none', md: 'block' },
+            display: { xs: debug ? 'block' : 'none', md: 'block' },
             minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -170,9 +213,45 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
             textAlign: 'right',
           }}
         >
-          {sign}{transaction.currency} {formatMinorUnits(Math.abs(amountForDisplay))}
+          {amountForDisplay === null ? '金额待修正' : `${sign}${transaction.currency} ${formatMinorUnits(Math.abs(amountForDisplay))}`}
         </Typography>
       </Box>
+      {aiCategory && (aiCategory.confidence !== null || aiCategory.explanation) ? (
+        <Box sx={{ gridColumn: '3 / -1', gridRow: { xs: 4, md: 2 }, minWidth: 0, justifySelf: 'stretch', textAlign: 'left', overflowWrap: 'anywhere' }}>
+          {aiCategory.confidence !== null ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              AI 分类置信度：{(aiCategory.confidence * 100).toFixed(1)}%
+            </Typography>
+          ) : null}
+          {aiCategory.explanation ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              说明：{aiCategory.explanation}
+            </Typography>
+          ) : null}
+        </Box>
+      ) : null}
+    </Box>
+      {debug && showDebugData ? (
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, pb: 1 }}>
+            <Typography variant="caption" color="text.secondary">原始 OCR / 调试对象</Typography>
+            <IconButton
+              size="small"
+              aria-label={expanded ? '折叠原始 OCR 对象' : '展开原始 OCR 对象'}
+              aria-expanded={expanded}
+              aria-controls={detailsId}
+              onClick={() => setExpanded((value) => !value)}
+            >
+              <ExpandMoreIcon sx={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
+            </IconButton>
+          </Box>
+          <Collapse in={expanded} unmountOnExit>
+            <Box id={detailsId} component="pre" sx={{ m: 0, mb: 2, p: 1.5, fontSize: 12, overflow: 'auto', maxHeight: 480, bgcolor: 'action.hover', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+              {JSON.stringify(transaction, null, 2)}
+            </Box>
+          </Collapse>
+        </>
+      ) : null}
     </Box>
   );
 }
