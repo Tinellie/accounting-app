@@ -6,11 +6,23 @@ services:
     environment:
       DATABASE_URL: /app/data/app.db
       NODE_ENV: production
+      WECHAT_OCR_URL: http://wechat-ocr:8765
     volumes:
       - sqlite_data:/app/data
       - ./data/icons-preset:/app/data/icons-preset:ro
     expose:
       - "3000"
+
+  wechat-ocr:
+    profiles: ["wechat-import"]
+    build:
+      context: ./scripts/wechat-ocr
+    environment:
+      WECHAT_OCR_WORKERS: "4"
+    volumes:
+      - wechat_ocr_models:/root/.paddlex
+    expose:
+      - "8765"
 
   caddy:
     image: caddy:2-alpine
@@ -23,3 +35,4 @@ services:
 
 volumes:
   sqlite_data:
+  wechat_ocr_models:

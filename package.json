@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:wechat-import": "node --experimental-strip-types --test scripts/wechat-import.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:backfill-account-codes": "node scripts/backfill-account-codes.mjs",
     "db:backfill-category-codes": "node scripts/backfill-category-codes.mjs",
@@ -36,6 +37,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.89.0",
+    "sharp": "^0.35.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {

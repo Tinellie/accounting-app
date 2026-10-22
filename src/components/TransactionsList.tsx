@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useId, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, Paper, Snackbar, Stack, Tooltip, Typography } from '@mui/material';
 import {
@@ -24,21 +24,83 @@ import type {
   TransactionType,
 } from '@/src/components/TransactionEntryForm/types';
 import TransactionListItem, { type TransactionListItemData } from '@/src/components/TransactionListItem';
+import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
 
 /**
  * 组件：交易列表
  * 功能：按月份展示交易记录，供用户查看和勾选流水。
  * 用户可以批量修改分类或账户、反转收支、编辑及删除记录。
  */
-type TransactionsListProps = {
+type EditableTransactionsListProps = {
   transactions: TransactionListItemData[];
   accounts: AccountOption[];
   categories: CategoryOption[];
+  showDebugData?: boolean;
+};
+
+type TransactionsListProps = (EditableTransactionsListProps & { mode?: 'default' }) | {
+  mode: 'preview';
+  transactions: PreviewTransaction[];
+  showDebugData?: boolean;
 };
 
 type TransactionActionResult = { success: boolean; message: string };
 
-export default function TransactionsList({ transactions, accounts, categories }: TransactionsListProps) {
+export default function TransactionsList(props: TransactionsListProps) {
+  return props.mode === 'preview'
+    ? <TransactionRows transactions={props.transactions} preview showDebugData={props.showDebugData} />
+    : <EditableTransactionsList {...props} />;
+}
+
+function TransactionRows({ transactions, preview = false, selectedIds, onSelectedChange, showDebugData = true }: {
+  transactions: (TransactionListItemData | PreviewTransaction)[];
+  preview?: boolean;
+  selectedIds?: Set<number>;
+  onSelectedChange?: (id: number, selected: boolean) => void;
+  showDebugData?: boolean;
+}) {
+  const headingId = useId();
+  const groups: { key: string; label: string; transactions: (TransactionListItemData | PreviewTransaction)[] }[] = [];
+  const formatter = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', ...(preview ? { timeZone: 'Asia/Shanghai' } : {}) });
+  transactions.forEach((transaction) => {
+    const label = transaction.occurredAt ? formatter.format(transaction.occurredAt) : '日期待修正';
+    const previous = groups[groups.length - 1];
+    if (previous?.label === label) previous.transactions.push(transaction);
+    else groups.push({ key: `${label}-${transaction.id}`, label, transactions: [transaction] });
+  });
+  return (
+    <Box id={preview ? undefined : 'txn-list'} component="section" aria-labelledby={headingId} sx={{ pb: preview ? 0 : { xs: 22, md: 12 } }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
+        <Typography id={headingId} component="h2" variant="h2">{preview ? '识别预览' : '全部流水'}</Typography>
+        <Typography variant="body2" color="text.secondary">{transactions.length} 笔</Typography>
+      </Box>
+      {transactions.length === 0 ? <Typography color="text.secondary" sx={{ py: 3 }}>暂无交易记录</Typography> : (
+        <Stack spacing={2}>
+          {groups.map((group) => (
+            <Box key={group.key}>
+              <Box component="header" sx={{ display: 'flex', alignItems: 'center', width: '100%', minHeight: 36, px: 1.5, py: 0.75, mb: 0.5, borderRadius: 0, bgcolor: 'action.hover', color: 'text.secondary' }}>
+                <Typography variant="subtitle2" sx={{ color: 'inherit', fontWeight: 600 }}>{group.label}</Typography>
+              </Box>
+              <Stack divider={<Divider flexItem />}>
+                {group.transactions.map((transaction) => (
+                  <TransactionListItem
+                    key={transaction.id}
+                    transaction={transaction}
+                    showDebugData={showDebugData}
+                    selected={selectedIds?.has(transaction.id)}
+                    onSelectedChange={onSelectedChange ? (selected) => onSelectedChange(transaction.id, selected) : undefined}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+function EditableTransactionsList({ transactions, accounts, categories, showDebugData }: EditableTransactionsListProps) {
   const router = useRouter();
   // 当前勾选的交易 ID，用于计算批量操作的目标。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -73,28 +135,6 @@ export default function TransactionsList({ transactions, accounts, categories }:
   const editableSelection = selectedTransactions.length === 1 && selectedTransactions[0]?.type !== 'adjustment'
     ? selectedTransactions[0]
     : null;
-
-  // 按交易发生月份分组，用于分段展示流水。
-  const monthlyGroups: { key: string; label: string; transactions: TransactionListItemData[] }[] = [];
-  // 将日期格式化为页面使用的年月标题。
-  const monthFormatter = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' });
-
-  transactions.forEach((transaction) => {
-    const year = transaction.occurredAt.getFullYear();
-    const month = transaction.occurredAt.getMonth();
-    const key = `${year}-${month}`;
-    const currentGroup = monthlyGroups[monthlyGroups.length - 1];
-
-    if (currentGroup?.key === key) {
-      currentGroup.transactions.push(transaction);
-    } else {
-      monthlyGroups.push({
-        key,
-        label: monthFormatter.format(transaction.occurredAt),
-        transactions: [transaction],
-      });
-    }
-  });
 
   function runAction(action: () => Promise<TransactionActionResult>, clearSelection = false) {
     setFeedback(null);
@@ -173,52 +213,7 @@ export default function TransactionsList({ transactions, accounts, categories }:
 
   return (
     <>
-      <Box id="txn-list" component="section" aria-labelledby="txn-title" sx={{ pb: { xs: 22, md: 12 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
-          <Typography id="txn-title" component="h2" variant="h2">全部流水</Typography>
-          <Typography variant="body2" color="text.secondary">{transactions.length} 笔</Typography>
-        </Box>
-
-        {transactions.length === 0 ? (
-          <Typography color="text.secondary" sx={{ py: 3 }}>暂无交易记录</Typography>
-        ) : (
-          <Stack spacing={2}>
-            {monthlyGroups.map((group) => (
-              <Box key={group.key}>
-                <Box
-                  component="header"
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    width: '100%',
-                    minHeight: 36,
-                    px: 1.5,
-                    py: 0.75,
-                    mb: 0.5,
-                    borderRadius: 0,
-                    bgcolor: 'action.hover',
-                    color: 'text.secondary',
-                  }}
-                >
-                  <Typography variant="subtitle2" sx={{ color: 'inherit', fontWeight: 600 }}>
-                    {group.label}
-                  </Typography>
-                </Box>
-                <Stack divider={<Divider flexItem />}>
-                  {group.transactions.map((transaction) => (
-                    <TransactionListItem
-                      key={transaction.id}
-                      transaction={transaction}
-                      selected={selectedIds.has(transaction.id)}
-                      onSelectedChange={(selected) => changeRowSelection(transaction.id, selected)}
-                    />
-                  ))}
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </Box>
+      <TransactionRows transactions={transactions} selectedIds={selectedIds} onSelectedChange={changeRowSelection} showDebugData={showDebugData} />
 
       <Paper
         component="section"

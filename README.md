@@ -85,6 +85,95 @@ docker compose up --build
 
 The app is reverse-proxied by Caddy at `http://localhost`.
 
+## WeChat Screenshot Import (Preview Only)
+
+On the transactions page, choose **从微信截图导入**, then select a JPG, PNG, or
+WebP screenshot (up to 20 MB). Recognition runs locally using PaddleOCR
+PP-OCRv5 server detection/recognition models, supporting Chinese, English,
+and digits. Screenshots are not sent to a third-party OCR API.
+
+### Local OCR service (Windows, Python 3.10)
+
+Use a dedicated environment; this does not change the application's database.
+
+```powershell
+python -m venv .venv-wechat
+.\.venv-wechat\Scripts\python.exe -m pip install -r scripts\wechat-ocr\requirements.txt
+.\.venv-wechat\Scripts\python.exe -m uvicorn server:app --app-dir scripts\wechat-ocr --host 127.0.0.1 --port 8765
+```
+
+The service downloads public model weights on first startup. Wait for
+`Application startup complete` before importing. The screenshot preprocessing /
+initial OCR queue runs up to four slice tasks concurrently. The service defaults
+to four independent model workers, with two CPU threads each. On memory-constrained machines,
+set `$env:WECHAT_OCR_WORKERS = "1"` before starting it. Check readiness at
+`http://127.0.0.1:8765/health`. Do not expose the OCR port to the public internet.
+
+Next.js defaults to `WECHAT_OCR_URL=http://127.0.0.1:8765`; set this server-only
+environment variable when using another trusted local service address.
+
+For Docker Compose, enable the optional local OCR service:
+
+```bash
+docker compose --profile wechat-import up --build
+```
+
+The OCR port remains internal to the Compose network and downloaded models are
+cached in the `wechat_ocr_models` volume.
+
+### Processing and debug output
+
+- Detect full-width separators and month-header background changes, then save
+  original slices to `data/import-vx-debug/<batch UUID>/1.png`, `2.png`, etc.
+- Detect dark backgrounds, invert if needed, remove the avatar from OCR input,
+  then convert to black/white. Original comparison images are unchanged.
+- Recognize each row, retain text boxes/confidence, and partition by coordinates.
+  Upper-right signed amounts are kept separate from lower-right balances.
+  Invalid amount/date regions are retried on enlarged grayscale crops.
+- Associate each transaction with the nearest preceding year/month header in
+  screenshot order, regardless of asynchronous OCR completion order. Dates use
+  Chinese local time (`UTC+08:00`); amounts use integer minor units.
+- Choose the first top-level category of the corresponding income/expense type,
+  ordered by `sortOrder`, then name, matching existing transaction operations.
+- Missing/invalid amounts, signs, dates, or year headers remain `null`, with
+  explicit red errors. No zero-amount/current-date substitutes are generated.
+- The shared transactions list runs in read-only preview mode. Its optional
+  `showDebugData` prop controls original slice images and expandable raw OCR
+  objects (defaults to `true` for compatibility). The import dialog explicitly
+  passes `false` to hide both; validation errors remain visible. Debug data is
+  still generated and retained on disk. No transaction is saved, no balance is
+  modified, and database edit/delete actions are unavailable.
+- During processing, the dialog receives live step updates from the server:
+  service readiness, slicing, preprocessing, first-pass OCR, transaction parsing,
+  grayscale retries, and preview preparation. Row counters reflect completed work,
+  including month headers in the slicing/OCR totals. Retries show completed counts
+  rather than an estimated percentage while their total is still being discovered.
+
+The import POST endpoint streams newline-delimited JSON when requested with
+`Accept: application/x-ndjson`. Events are `progress`, followed by either a final
+`result` or an `error`; a stream ending without a result is treated as a failure.
+Errors after streaming starts are delivered as events, not HTTP status changes.
+Requests without that Accept header retain the original JSON response format.
+
+Each batch also contains binary inputs, grayscale retry crops, and `result.json`.
+Primary OCR coordinates are relative to the avatar-cropped slice; add
+`avatarCropLeft` to map x coordinates to the original slice. Retry coordinates
+are relative to their saved enlarged image, with original slice crop bounds
+recorded alongside them.
+
+Debug output includes sensitive financial information, is git-ignored, and is
+retained for manual inspection. Remove specific batch directories when no longer
+needed. The image route serves only numeric original slices from UUID batches,
+not arbitrary filesystem paths. Closing the dialog cancels the client request;
+an inference already running locally may finish, but cannot write transactions.
+
+Run focused parsing, date-validation, dark/light preprocessing, and separator
+tests with Node.js 22.6 or newer:
+
+```bash
+npm run test:wechat-import
+```
+
 ```
 261002-accounting
 ├─ 📁app

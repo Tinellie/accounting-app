@@ -20,6 +20,9 @@
 # production
 /build
 /data/icons/
+/data/import-vx-debug/
+/.venv-wechat/
+/scripts/wechat-ocr/__pycache__/
 
 # misc
 .DS_Store
