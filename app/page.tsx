@@ -18,8 +18,8 @@ export default async function Home() {
   await connection();
   // 统一图表的时间基准，避免服务端和客户端使用不同的当前时间。
   const asOf = new Date();
-  // 预取图表最长区间，即当前时间往前 90 天。
-  const lookbackStart = new Date(asOf.getTime() - 90 * 24 * 60 * 60 * 1000);
+  // 预取图表最长区间，即当前时间往前 180 天。
+  const lookbackStart = new Date(asOf.getTime() - 180 * 24 * 60 * 60 * 1000);
   // 读取图表所需的收支、金额、日期、币种及分类显示信息。
   const categoryTransactions = db
     .select({
@@ -30,6 +30,7 @@ export default async function Home() {
       categoryId: categories.id,
       categoryName: categories.name,
       categoryColor: categories.color,
+      parentCategoryId: parentCategories.id,
       parentCategoryName: parentCategories.name,
       parentCategoryColor: parentCategories.color,
     })

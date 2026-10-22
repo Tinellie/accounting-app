@@ -45,6 +45,25 @@ cp .env.example .env
 npm run dev
 ```
 
+## Dashboard Charts
+
+The category pie chart and its legend share the same order: parent categories
+by combined amount descending, then categories within each parent by amount
+descending. Direct parent-category transactions contribute to that parent's
+total; uncategorized transactions form a separate group. Equal amounts retain
+their source order. Sorting does not merge child slices or change percentages.
+The existing income/expense, date-range, and currency filters apply before sorting.
+The legend shows each parent name and combined amount, with indented child
+names and amounts beneath it. Direct parent transactions appear as a separate
+child row when that group also contains subcategories; standalone categories
+and uncategorized transactions appear only once.
+The category-level toggle defaults to showing subcategories. Parent-only mode
+combines child slices into their parent and hides child legend rows, without
+changing the total. Date options are 7, 30 (default), 90, and 180 days; the
+server fetches the full 180-day range.
+
+Run sorting tests with `npm run test:category-chart`.
+
 ## Database Commands
 
 ```bash
