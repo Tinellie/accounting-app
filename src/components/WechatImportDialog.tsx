@@ -4,15 +4,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack } from '@mui/material';
 import { UploadFile as UploadFileIcon } from '@mui/icons-material';
 import TransactionsList from '@/src/components/TransactionsList';
+import SourceAccountField from '@/src/components/TransactionEntryForm/SourceAccountField';
+import type { AccountOption } from '@/src/components/TransactionEntryForm/types';
 import WechatImportProgress from '@/src/components/WechatImportProgress';
 import { readImportStream } from '@/src/lib/wechat-import/stream';
 import type { ImportProgress, ImportStage, PreviewTransaction } from '@/src/lib/wechat-import/types';
 
-export default function WechatImportDialog() {
+export default function WechatImportDialog({ accounts }: { accounts: AccountOption[] }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<PreviewTransaction[] | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
   const [progress, setProgress] = useState<Partial<Record<ImportStage, ImportProgress>>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const controller = useRef<AbortController | null>(null);
@@ -30,6 +33,7 @@ export default function WechatImportDialog() {
   async function load(file: File) {
     setError(null);
     setTransactions(null);
+    setSelectedAccountId('');
     setProgress({});
     if (file.size > 20 * 1024 * 1024) {
       setError('图片不能超过 20 MB');
@@ -77,6 +81,13 @@ export default function WechatImportDialog() {
 
   const invalidCount = transactions?.filter((transaction) => transaction.importDebug.errors.length > 0 || transaction.aiCategory?.status === 'error').length ?? 0;
   const warningCount = transactions?.filter((transaction) => transaction.aiCategory?.status === 'warning').length ?? 0;
+  const selectedAccount = accounts.find((account) => String(account.id) === selectedAccountId);
+  const previewTransactions = transactions?.map((transaction) => selectedAccount ? {
+    ...transaction,
+    accountId: selectedAccount.id,
+    accountName: selectedAccount.name,
+    currency: selectedAccount.currency,
+  } : transaction) ?? null;
   return (
     <>
       <Box>
@@ -86,7 +97,6 @@ export default function WechatImportDialog() {
         <DialogTitle>从微信截图导入</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <Alert severity="info">仅识别与预览，不会写入交易或修改账户余额。请上传包含年月标题的微信账单截图。自动分类会将完整分类列表与各行交易描述、收支类型发送给 DeepSeek，不发送截图、金额或日期。</Alert>
             <input
               ref={inputRef}
               type="file"
@@ -99,17 +109,29 @@ export default function WechatImportDialog() {
                 if (file) void load(file);
               }}
             />
-            <Button variant="contained" disabled={pending} startIcon={<UploadFileIcon />} onClick={() => inputRef.current?.click()}>
-              {transactions ? '选择另一张图片' : '选择图片文件'}
-            </Button>
-            {pending || Object.keys(progress).length > 0 ? <WechatImportProgress progress={progress} pending={pending} failed={error !== null} /> : null}
+            {!transactions ? (
+              <>
+                <Button variant="contained" disabled={pending} startIcon={<UploadFileIcon />} onClick={() => inputRef.current?.click()}>
+                  选择图片文件
+                </Button>
+                {pending || Object.keys(progress).length > 0 ? <WechatImportProgress progress={progress} pending={pending} failed={error !== null} /> : null}
+              </>
+            ) : null}
             {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
-            {transactions ? (
+            {transactions && previewTransactions ? (
               <>
                 <Alert severity={invalidCount ? 'error' : warningCount ? 'warning' : 'success'}>
                   识别出 {transactions.length} 笔交易，{invalidCount} 笔存在识别或 AI 分类错误，{warningCount} 笔 AI 分类置信度低于 50%。请确认金额、日期和分类；AI 置信度是模型自报分数，不代表实际准确率。
                 </Alert>
-                <TransactionsList mode="preview" transactions={transactions} showDebugData={false} />
+                <SourceAccountField
+                  accounts={accounts}
+                  type="expense"
+                  sourceAccountId={selectedAccountId}
+                  onAccountChange={setSelectedAccountId}
+                  fieldId="wechat-import-account"
+                />
+                {accounts.length === 0 ? <Alert severity="warning">暂无可用账户，请先在账户管理中添加账户。</Alert> : null}
+                <TransactionsList mode="preview" transactions={previewTransactions} showDebugData={false} />
               </>
             ) : null}
           </Stack>

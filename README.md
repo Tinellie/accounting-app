@@ -94,6 +94,12 @@ and digits. Screenshots are not sent to a third-party OCR API. After OCR,
 automatic category recognition sends the complete category list and each row's
 description, income/expense type, and temporary transaction ID to DeepSeek.
 Images, amounts, dates, account information, and raw OCR boxes are not sent.
+After recognition completes, the image selection button and processing step list
+are hidden. The preview reuses the transaction form's account selector: selecting
+an account assigns its ID, name, and currency to every preview row. Switching or
+clearing the selection updates all rows together; amounts are unchanged (no
+currency conversion is performed). This is still a preview and does not save
+transactions or alter account balances.
 
 ### DeepSeek automatic categories
 
@@ -135,6 +141,17 @@ DeepSeek request. The processing progress panel includes the AI classification s
 ### Local OCR service (Windows, Python 3.10)
 
 Use a dedicated environment; this does not change the application's database.
+
+In VS Code, select **启动开发服务器** in Run and Debug and press **F5** to
+launch Next.js and PaddleOCR together in separate terminals. Wait for the OCR
+terminal's `Application startup complete` message before importing. Stopping
+either debug session stops the compound's other session too. The individual
+**仅启动 Next.js** and **启动 PaddleOCR 服务** configurations are also available.
+Do not start a second OCR instance if port 8765 is already in use.
+
+The F5 configuration uses `.venv-wechat\Scripts\python.exe` explicitly, independent
+of VS Code's selected Python interpreter. Prepare this environment once with the
+first two commands below. F5 does not install dependencies automatically.
 
 ```powershell
 python -m venv .venv-wechat

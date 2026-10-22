@@ -38,7 +38,7 @@ export type PreviewTransaction = Omit<TransactionListItemData, 'amount' | 'occur
   amount: number | null;
   occurredAt: Date | null;
   type: 'expense' | 'income' | null;
-  accountId: null;
+  accountId: number | null;
   importDebug: ImportDebug;
   aiCategory?: AiCategoryFeedback;
 };
@@ -52,8 +52,9 @@ export type AiCategoryFeedback = {
   rawResponse: unknown;
 };
 
-export type ImportTransaction = Omit<PreviewTransaction, 'occurredAt'> & {
+export type ImportTransaction = Omit<PreviewTransaction, 'occurredAt' | 'accountId'> & {
   occurredAt: string | null;
+  accountId: null;
 };
 
 export type ImportResult = {

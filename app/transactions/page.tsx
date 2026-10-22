@@ -79,7 +79,7 @@ export default function TransactionsPage() {
   return (
     <Stack component="section" spacing={3.5}>
       <PageHeading eyebrow="ACTIVITY" title="交易明细" description="记录收支与账户转账，查看完整流水" />
-      <WechatImportDialog />
+      <WechatImportDialog accounts={accountOptions} />
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
       <TransactionsList transactions={transactionRows} accounts={accountOptions} categories={categoryOptions} />
     </Stack>
