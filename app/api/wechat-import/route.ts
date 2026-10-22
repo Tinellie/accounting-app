@@ -9,7 +9,10 @@ const MAX_UPLOAD = 20 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) {
+  const requestUrl = new URL(request.url);
+  // Next.js can use its internal localhost URL even when the client accesses a LAN host.
+  const expectedOrigin = `${requestUrl.protocol}//${request.headers.get('host') ?? requestUrl.host}`;
+  if (origin && origin !== expectedOrigin) {
     return Response.json({ error: '不允许跨站上传' }, { status: 403 });
   }
   try {

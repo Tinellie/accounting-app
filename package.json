@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:wechat-import": "node --experimental-strip-types --test scripts/wechat-import.test.mjs",
+    "test:wechat-import": "node --experimental-strip-types --test scripts/wechat-import.test.mjs scripts/wechat-import-save.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:backfill-account-codes": "node scripts/backfill-account-codes.mjs",
     "db:backfill-category-codes": "node scripts/backfill-category-codes.mjs",
