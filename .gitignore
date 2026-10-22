@@ -21,6 +21,11 @@
 /build
 /data/icons/
 
+# local SQLite ledger and runtime files
+/data/accounting.db
+/data/accounting.db-shm
+/data/accounting.db-wal
+
 # misc
 .DS_Store
 *.pem
@@ -40,3 +45,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.venv-wechat/*
