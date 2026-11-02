@@ -410,10 +410,14 @@ docker compose -f compose.production.yaml logs --tail=100 app
 ```
 
 OCR is optional and resource-limited: one worker, half a CPU, 768 MB RAM and
-up to 768 MB additional swap. Its PP-OCRv5 server models retain recognition
-quality but run more slowly; model startup/inference must be tested on small
-servers. If it cannot stay healthy under this limit, stop it instead of raising
-limits on a shared 2 GB host. No OCR port is published. Downloaded models persist
+up to 2304 MB additional swap (3 GB combined). A real screenshot exceeded the
+previous 1536 MB combined limit and caused an OOM restart; the RAM/CPU caps remain
+unchanged. Its PP-OCRv5 server models retain recognition quality but run more
+slowly; inference must be tested on real-sized crops, not only a small text image.
+Production allows up to 300 seconds per OCR call; local development retains
+120 seconds. Set `WECHAT_OCR_TIMEOUT_MS` (1000–600000 ms) to override this deadline.
+The host must have sufficient free swap. If it cannot stay healthy under these
+limits, stop it rather than consume other services' RAM. No OCR port is published. Downloaded models persist
 separately. Start/stop it explicitly after pulling its image with registry access:
 The manual **Manage Accounting OCR** Actions workflow provides authenticated
 start/stop commands and stops OCR automatically if startup fails its health check.
@@ -571,7 +575,9 @@ python -m venv .venv-wechat
 
 The service downloads public model weights on first startup. Wait for
 `Application startup complete` before importing. The screenshot preprocessing /
-initial OCR queue runs up to four slice tasks concurrently. The service defaults
+initial OCR queue follows the worker count reported by `/health` (one to four
+slice tasks concurrently), avoiding a four-request queue on a one-worker server.
+The service defaults
 to four independent model workers, with two CPU threads each. On memory-constrained machines,
 set `$env:WECHAT_OCR_WORKERS = "1"` before starting it. Check readiness at
 `http://127.0.0.1:8765/health`. Do not expose the OCR port to the public internet.

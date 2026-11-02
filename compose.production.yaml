@@ -12,6 +12,7 @@ services:
       HOSTNAME: 0.0.0.0
       NODE_OPTIONS: --max-old-space-size=256
       WECHAT_OCR_URL: http://wechat-ocr:8765
+      WECHAT_OCR_TIMEOUT_MS: "300000"
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
     volumes:
@@ -52,7 +53,7 @@ services:
     volumes:
       - wechat_ocr_models:/root/.paddlex
     mem_limit: 768m
-    memswap_limit: 1536m
+    memswap_limit: 3g
     cpus: 0.5
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=5)"]

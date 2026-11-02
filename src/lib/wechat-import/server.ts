@@ -19,10 +19,11 @@ const boxSchema = z.object({
   box: z.tuple([z.number().nonnegative(), z.number().nonnegative(), z.number().nonnegative(), z.number().nonnegative()]),
 });
 const ocrSchema = z.object({ boxes: z.array(boxSchema).max(2000) });
+const healthSchema = z.object({ ready: z.literal(true), workers: z.number().int().min(1).max(4) });
 
 export class ImportError extends Error {
-  constructor(message: string, public readonly status: number) {
-    super(message);
+  constructor(message: string, public readonly status: number, options?: ErrorOptions) {
+    super(message, options);
   }
 }
 
@@ -32,16 +33,26 @@ function ocrUrl(endpoint: string) {
 
 export async function recognize(image: Buffer, signal: AbortSignal): Promise<OcrBox[]> {
   let response: Response;
+  const configuredTimeout = z.coerce.number().int().min(1000).max(600_000)
+    .safeParse(process.env.WECHAT_OCR_TIMEOUT_MS ?? 120_000);
+  if (!configuredTimeout.success) throw new ImportError('WECHAT_OCR_TIMEOUT_MS 必须为 1000–600000 毫秒的整数', 500);
+  const timeoutMs = configuredTimeout.data;
+  const timeout = AbortSignal.timeout(timeoutMs);
   try {
     response = await fetch(ocrUrl('ocr'), {
       method: 'POST',
       headers: { 'Content-Type': 'image/png' },
       body: new Uint8Array(image),
-      signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
+      signal: AbortSignal.any([signal, timeout]),
     });
   } catch (error) {
     if (signal.aborted) throw error;
-    throw new ImportError('本地 OCR 服务连接失败或识别超时，请检查服务日志后重试', 503);
+    throw new ImportError(
+      timeout.aborted ? `OCR 单次识别超过 ${timeoutMs / 1000} 秒，请缩短截图或检查服务器负载后重试`
+        : 'OCR 服务连接中断，服务可能重启或内存不足，请检查服务日志后重试',
+      timeout.aborted ? 504 : 503,
+      { cause: error },
+    );
   }
   if (!response.ok) throw new ImportError(`本地 OCR 服务识别失败（HTTP ${response.status}），请查看服务日志`, 502);
   const parsed = ocrSchema.safeParse(await response.json());
@@ -49,10 +60,10 @@ export async function recognize(image: Buffer, signal: AbortSignal): Promise<Ocr
   return parsed.data.boxes;
 }
 
-async function mapConcurrent<T, R>(values: T[], operation: (value: T, index: number) => Promise<R>): Promise<R[]> {
+async function mapConcurrent<T, R>(values: T[], concurrency: number, operation: (value: T, index: number) => Promise<R>): Promise<R[]> {
   const result: R[] = new Array(values.length);
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(4, values.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
     while (next < values.length) {
       const index = next++;
       result[index] = await operation(values[index], index);
@@ -75,10 +86,14 @@ export async function importScreenshot(
   const sourceName = cmb ? '招商银行' : alipayHk ? '支付宝(HK)' : alipay ? '支付宝' : '微信';
   if (cmb && !validScreenshotDate(screenshotDate)) throw new ImportError('请选择有效的截图日期', 400);
   const currentYear = new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCFullYear();
+  let concurrency: number;
   onProgress?.({ stage: 'health', status: 'running', completed: 0, total: 1, message: '正在检查本地 OCR 服务' });
   try {
     const health = await fetch(ocrUrl('health'), { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]), cache: 'no-store' });
     if (!health.ok) throw new ImportError('本地 OCR 服务尚未就绪', 503);
+    const parsedHealth = healthSchema.safeParse(await health.json());
+    if (!parsedHealth.success) throw new ImportError('OCR 服务健康检查返回的数据无效或尚未就绪', 502);
+    concurrency = parsedHealth.data.workers;
   } catch (error) {
     if (signal.aborted || error instanceof ImportError) throw error;
     throw new ImportError('本地 OCR 服务未启动，请先按 README 启动 PaddleOCR 服务（默认端口 8765）', 503);
@@ -106,9 +121,9 @@ export async function importScreenshot(
   const relativePath = (name: string) => `data/import-vx-debug/${batchId}/${name}`;
   let preprocessed = 0;
   let recognized = 0;
-  onProgress?.({ stage: 'preprocess', status: 'running', completed: 0, total, message: '正在去头像、反色及二值化（最多 4 行并发）' });
+  onProgress?.({ stage: 'preprocess', status: 'running', completed: 0, total, message: `正在去头像、反色及二值化（最多 ${concurrency} 行并发）` });
   onProgress?.({ stage: 'ocr', status: 'running', completed: 0, total, message: '等待首批预处理完成后识别' });
-  const result = await mapConcurrent(split.slices, async (slice, index) => {
+  const result = await mapConcurrent(split.slices, concurrency, async (slice, index) => {
     signal.throwIfAborted();
     const sequence = index + 1;
     let original = await sharp(split.image).extract({ left: 0, top: slice.top, width: split.width, height: slice.height }).png().toBuffer();
