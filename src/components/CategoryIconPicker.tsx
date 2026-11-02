@@ -19,6 +19,7 @@ import CategoryIcon, {
  * 功能：供用户搜索、浏览并选择分类图标，也可清除当前选择。
  */
 type CategoryIconPickerProps = {
+  entityLabel?: string;
   iconNames: string[];
   value: string;
   onChange: (icon: string) => void;
@@ -32,7 +33,7 @@ type CategoryIconPickerState = {
 
 const pageSize = 72;
 
-export default function CategoryIconPicker({ iconNames, value, onChange }: CategoryIconPickerProps) {
+export default function CategoryIconPicker({ iconNames, value, onChange, entityLabel = '分类' }: CategoryIconPickerProps) {
   // 图标弹窗锚点、搜索词和当前展示数量共同描述选择器界面。
   const [pickerState, setPickerState] = useState<CategoryIconPickerState>({
     anchorElement: null,
@@ -73,7 +74,7 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
       <Tooltip title={selectedLabel}>
         <IconButton
           type="button"
-          aria-label={`分类图标：${selectedLabel}`}
+          aria-label={`${entityLabel}图标：${selectedLabel}`}
           aria-haspopup="grid"
           aria-expanded={Boolean(anchorElement)}
           onClick={(event) => {
@@ -133,7 +134,7 @@ export default function CategoryIconPicker({ iconNames, value, onChange }: Categ
               </Tooltip>
             </Box>
             <Box
-              aria-label="分类图标选项"
+              aria-label={`${entityLabel}图标选项`}
               sx={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',

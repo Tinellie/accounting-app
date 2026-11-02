@@ -7,16 +7,17 @@ import { categoryColorPalette } from '@/src/lib/category-colors';
  * 功能：让用户为分类选择颜色，或使用自动分配/跟随上级分类的颜色。
  */
 type CategoryColorPickerProps = {
+  entityLabel?: string;
   color: string | null;
   hasParent: boolean;
   parentColor: string | null;
   onChange: (color: string | null) => void;
 };
 
-export default function CategoryColorPicker({ color, hasParent, parentColor, onChange }: CategoryColorPickerProps) {
+export default function CategoryColorPicker({ color, hasParent, parentColor, onChange, entityLabel = '分类' }: CategoryColorPickerProps) {
   return (
     <Stack spacing={0.75}>
-      <Typography variant="body2" sx={{ fontWeight: 600 }}>分类颜色</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>{entityLabel}颜色</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
         <Button
           type="button"
@@ -25,7 +26,7 @@ export default function CategoryColorPicker({ color, hasParent, parentColor, onC
           onClick={() => onChange(null)}
           sx={{ height: 26, minHeight: 26, py: 0, px: 0.75, fontSize: 12, whiteSpace: 'nowrap' }}
         >
-          {hasParent ? '跟随一级分类' : '自动分配'}
+          {hasParent ? `跟随一级${entityLabel}` : '自动分配'}
         </Button>
         {categoryColorPalette.map((swatch) => (
           <Tooltip key={swatch} title={swatch}>
@@ -50,7 +51,7 @@ export default function CategoryColorPicker({ color, hasParent, parentColor, onC
         <Tooltip title="自定义颜色">
           <Box
             component="label"
-            aria-label="选择自定义分类颜色"
+            aria-label={`选择自定义${entityLabel}颜色`}
             sx={{
               position: 'relative',
               display: 'inline-flex',
@@ -86,7 +87,7 @@ export default function CategoryColorPicker({ color, hasParent, parentColor, onC
             />
             <input
               id="category-custom-color"
-              aria-label="选择自定义分类颜色"
+              aria-label={`选择自定义${entityLabel}颜色`}
               type="color"
               value={color ?? categoryColorPalette[0]}
               onChange={(event) => onChange(event.target.value.toUpperCase())}
@@ -108,7 +109,7 @@ export default function CategoryColorPicker({ color, hasParent, parentColor, onC
         {color
           ? `已选择 ${color.toUpperCase()}`
           : hasParent
-            ? `不指定时使用一级分类颜色${parentColor ? ` ${parentColor}` : ''}`
+            ? `不指定时使用一级${entityLabel}颜色${parentColor ? ` ${parentColor}` : ''}`
             : '未手动选择时，将自动分配适合图表展示的颜色'}
       </Typography>
     </Stack>

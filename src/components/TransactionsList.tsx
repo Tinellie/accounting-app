@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, useTransition, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useId, useState, useTransition, type ReactNode } from 'react';
 import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, Paper, Snackbar, Stack, Tooltip, Typography } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -11,6 +10,7 @@ import {
 import {
   bulkUpdateTransactionAccountAction,
   bulkUpdateTransactionCategoryAction,
+  bulkUpdateTransactionTagsAction,
   deleteTransactionsAction,
   reverseTransactionCategoryTypeAction,
 } from '@/app/transactions/actions';
@@ -27,6 +27,9 @@ import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
 import { assignPreviewAccount, assignPreviewCategory, editPreviewRow, updateRowSelection } from '@/src/lib/wechat-import/preview';
 import { createTransactionSchema } from '@/src/lib/validations';
 import TransactionFilters from './TransactionFilters';
+import TransactionTagField from './TransactionTagField';
+import type { TagRecord } from '../lib/tags';
+import { getTagSelectionState } from '../lib/tag-selection';
 import { amountFilterExtent, exchangeRateSchema, filterTransactions, initialTransactionFilters, type ExchangeRates, type TransactionFilters as FilterValues } from '../lib/transaction-filters';
 
 /**
@@ -40,6 +43,7 @@ type EditableTransactionsListProps = {
   categories: CategoryOption[];
   showDebugData?: boolean;
   filterAccounts?: AccountOption[];
+  tags?: TagRecord[];
 };
 
 type TransactionsListProps = (EditableTransactionsListProps & { mode?: 'default' }) | {
@@ -115,7 +119,7 @@ function TransactionRows({ transactions, preview = false, selectedIds, onSelecte
                     transaction={transaction}
                     showDebugData={showDebugData}
                     selected={selectedIds?.has(transaction.id)}
-                    onSelectedChange={onSelectedChange ? (selected, exclusive) => onSelectedChange(transaction.id, selected, exclusive) : undefined}
+                    onSelectedChange={onSelectedChange}
                   />
                 ))}
               </Stack>
@@ -133,6 +137,7 @@ function TransactionRows({ transactions, preview = false, selectedIds, onSelecte
 function EditableTransactionsList(props: TransactionsListProps) {
   const { transactions, accounts, categories, showDebugData } = props;
   const preview = props.mode === 'preview';
+  const toolbarBreakpoint = preview ? 'md' : 'lg';
   const [filters, setFilters] = useState<FilterValues>({ ...initialTransactionFilters });
   const [rateRequested, setRateRequested] = useState(false);
   const [rateAttempt, setRateAttempt] = useState(0);
@@ -171,7 +176,6 @@ function EditableTransactionsList(props: TransactionsListProps) {
     }
   }
   const fieldPrefix = useId();
-  const router = useRouter();
   // 当前勾选的交易 ID，用于计算批量操作的目标。
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // 批量分类和账户选择框当前显示的值。
@@ -219,7 +223,6 @@ function EditableTransactionsList(props: TransactionsListProps) {
         setFeedback(result);
         if (result.success) {
           if (clearSelection) setSelectedIds(new Set());
-          router.refresh();
         }
       } catch {
         setFeedback({ success: false, message: '操作失败，请稍后重试' });
@@ -227,10 +230,10 @@ function EditableTransactionsList(props: TransactionsListProps) {
     });
   }
 
-  function changeRowSelection(transactionId: number, selected: boolean, exclusive = false) {
+  const changeRowSelection = useCallback((transactionId: number, selected: boolean, exclusive = false) => {
     if (disabled) return;
     setSelectedIds((current) => updateRowSelection(current, transactionId, selected, exclusive));
-  }
+  }, [disabled, setSelectedIds]);
 
   function changePreview(operation: (rows: PreviewTransaction[]) => PreviewTransaction[]) {
     if (props.mode !== 'preview' || disabled) return;
@@ -276,6 +279,16 @@ function EditableTransactionsList(props: TransactionsListProps) {
       return;
     }
     runAction(() => bulkUpdateTransactionAccountAction({ transactionIds, accountId }));
+  }
+
+  function handleTagToggle(tagId: number) {
+    if (preview || disabled || !selectedTransactions.length) return;
+    const operation = getTagSelectionState(selectedTransactions, tagId) === 'all' ? 'remove' : 'add';
+    runAction(() => bulkUpdateTransactionTagsAction({
+      transactionIds: selectedTransactions.map((transaction) => transaction.id),
+      tagIds: [tagId],
+      operation,
+    }));
   }
 
   function confirmDeleteSelection() {
@@ -339,7 +352,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
       <TransactionRows transactions={visibleTransactions} preview={preview} selectedIds={selectedIds} onSelectedChange={disabled ? undefined : changeRowSelection} showDebugData={showDebugData}
         total={preview ? undefined : transactions.length}
         filters={props.mode !== 'preview' ? <TransactionFilters value={filters} onChange={(value) => { setFilters(value); setSelectedIds(new Set()); }}
-          accounts={props.filterAccounts ?? accounts} categories={categories} currencies={[...new Set(['CNY', ...props.transactions.map((row) => row.currency)])].sort()}
+          accounts={props.filterAccounts ?? accounts} categories={categories} tags={props.tags ?? []} currencies={[...new Set(['CNY', ...props.transactions.map((row) => row.currency)])].sort()}
           extent={extent} error={filterError} rateError={rateState.error} rates={rateState.rates}
           loading={rateRequested && !rateState.rates && !rateState.error}
           onRequestRates={() => setRateRequested(true)}
@@ -366,7 +379,8 @@ function EditableTransactionsList(props: TransactionsListProps) {
             display: 'grid',
             gridTemplateColumns: {
               xs: '32px minmax(0, 1fr) 40px 40px 40px',
-              md: '32px auto minmax(180px, 1fr) minmax(180px, 1fr) 40px 40px 40px',
+              [toolbarBreakpoint]: preview ? '32px auto minmax(180px, 1fr) minmax(180px, 1fr) 40px 40px 40px'
+                : '32px auto minmax(140px, 1fr) minmax(200px, 1.4fr) minmax(140px, 1fr) 40px 40px 40px',
             },
             alignItems: 'center',
             gap: 1,
@@ -386,7 +400,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
             已选 {selectedTransactions.length} 项
           </Typography>
 
-          <Box sx={{ gridColumn: { xs: '1 / 3', md: 3 }, minWidth: 0 }}>
+          <Box sx={{ gridColumn: { xs: '1 / 3', [toolbarBreakpoint]: 3 }, minWidth: 0 }}>
             <TransactionDetailField
               key={`bulk-category-${canChangeCategory ? selectedType : 'disabled'}`}
               type={canChangeCategory ? selectedType : 'expense'}
@@ -401,7 +415,13 @@ function EditableTransactionsList(props: TransactionsListProps) {
               disabled={!canChangeCategory || disabled}
             />
           </Box>
-          <Box sx={{ gridColumn: { xs: '3 / 6', md: 4 }, minWidth: 0 }}>
+          {!preview ? (
+            <Box sx={{ gridColumn: { xs: '3 / 6', [toolbarBreakpoint]: 4 }, minWidth: 0 }}>
+              <TransactionTagField mode="bulk" tags={props.tags ?? []} transactions={selectedTransactions} onToggle={handleTagToggle}
+                label="批量标签" fieldId={`${fieldPrefix}-bulk-tags`} disabled={!selectedTransactions.length} busy={disabled} />
+            </Box>
+          ) : null}
+          <Box sx={{ gridColumn: { xs: preview ? '3 / 6' : '1 / -1', [toolbarBreakpoint]: preview ? 4 : 5 }, minWidth: 0 }}>
             <SourceAccountField
               accounts={accounts}
               type={selectedType === 'transfer' ? 'transfer' : 'expense'}
@@ -414,7 +434,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
           </Box>
 
           <Tooltip title={containsRefund ? '退款记录不能反转收支类型，请通过编辑修改' : `反转支出/收入，分类设为目标类型首个分类${reverseCategory ? `：${reverseCategory.name}` : ''}`}>
-            <Box sx={{ gridColumn: { xs: 3, md: 5 }, justifySelf: 'center' }}>
+            <Box sx={{ gridColumn: { xs: 3, [toolbarBreakpoint]: preview ? 5 : 6 }, justifySelf: 'center' }}>
               <IconButton
                 aria-label="反转收支类型"
                 disabled={!canReverse || containsRefund || !reverseCategory || disabled}
@@ -426,7 +446,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
             </Box>
           </Tooltip>
           <Tooltip title="编辑所选交易">
-            <Box sx={{ gridColumn: { xs: 4, md: 6 }, justifySelf: 'center' }}>
+            <Box sx={{ gridColumn: { xs: 4, [toolbarBreakpoint]: preview ? 6 : 7 }, justifySelf: 'center' }}>
               <IconButton
                 aria-label="编辑所选交易"
                 disabled={selectedTransactions.length !== 1 || !editableSelection || disabled}
@@ -438,7 +458,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
             </Box>
           </Tooltip>
           <Tooltip title="删除所选交易">
-            <Box sx={{ gridColumn: { xs: 5, md: 7 }, justifySelf: 'center' }}>
+            <Box sx={{ gridColumn: { xs: 5, [toolbarBreakpoint]: preview ? 7 : 8 }, justifySelf: 'center' }}>
               <IconButton
                 aria-label="删除所选交易"
                 color="error"
@@ -494,7 +514,6 @@ function EditableTransactionsList(props: TransactionsListProps) {
             onSaved={() => {
               closeEdit();
               setSelectedIds(new Set());
-              if (!preview) router.refresh();
             }}
           />
         ) : null}

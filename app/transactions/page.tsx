@@ -6,7 +6,8 @@ import TransactionEntryForm from "@/src/components/TransactionEntryForm";
 import TransactionsList from "@/src/components/TransactionsList";
 import WechatImportDialog from "@/src/components/WechatImportDialog";
 import { db } from "@/src/db";
-import { accounts, categories, transactions } from "@/src/db/schema";
+import { accounts, categories, tags, transactions, transactionTags } from "@/src/db/schema";
+import { fallbackCategoryColor } from "@/src/lib/category-colors";
 
 /**
  * 组件：交易明细页面
@@ -53,6 +54,20 @@ export default function TransactionsPage() {
     type: accounts.type, icon: accounts.icon,
   }).from(accounts).orderBy(asc(accounts.name)).all();
 
+  const tagOptions = db.select().from(tags).orderBy(asc(tags.sortOrder), asc(tags.name)).all();
+  const tagById = new Map(tagOptions.map((tag) => [tag.id, tag]));
+  const tagsByTransaction = new Map<number, typeof tagOptions>();
+  for (const link of db.select().from(transactionTags).all()) {
+    const tag = tagById.get(link.tagId);
+    if (!tag) throw new Error(`Transaction tag ${link.tagId} does not exist`);
+    const linked = tagsByTransaction.get(link.transactionId) ?? [];
+    linked.push({
+      ...tag,
+      color: tag.color ?? tagById.get(tag.parentId ?? -1)?.color ?? fallbackCategoryColor(tag.parentId ?? tag.id),
+    });
+    tagsByTransaction.set(link.transactionId, linked);
+  }
+
   // 读取交易流水，并补充账户、分类、上级分类和转入账户的显示信息。
   const transactionRows = db
     .select({
@@ -95,8 +110,8 @@ export default function TransactionsPage() {
       </Stack>
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
       <TransactionsList transactions={transactionRows.map((row) => ({
-        ...row, isRefund: row.type === 'expense' && row.amount < 0,
-      }))} accounts={accountOptions} categories={categoryOptions} filterAccounts={filterAccountOptions} />
+        ...row, tags: tagsByTransaction.get(row.id) ?? [], isRefund: row.type === 'expense' && row.amount < 0,
+      }))} accounts={accountOptions} categories={categoryOptions} tags={tagOptions} filterAccounts={filterAccountOptions} />
     </Stack>
   );
 }

@@ -61,9 +61,14 @@ export const tags = sqliteTable(
   'tags',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
+    code: text('code'),
     name: text('name').notNull().unique(),
     color: text('color'),
+    icon: text('icon'),
+    parentId: integer('parent_id').references((): AnySQLiteColumn => tags.id, { onDelete: 'restrict' }),
+    sortOrder: integer('sort_order').notNull().default(0),
   },
+  (table) => [uniqueIndex('tags_code_unique').on(table.code)],
 );
 
 export const transactionTags = sqliteTable(

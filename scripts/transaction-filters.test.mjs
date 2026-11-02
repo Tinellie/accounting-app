@@ -60,6 +60,17 @@ test('category multi-selection matches exact categories, combines with other fil
   assert.deepEqual(ids(rows, { categoryIds: [] }), [1, 2, 3, 4]);
 });
 
+test('tag multi-selection ORs exact tags, ANDs other filters, and includes untagged rows only when cleared', () => {
+  const rows = [row(1, { tags: [{ id: 1 }, { id: 2 }] }), row(2, { tags: [{ id: 2 }], type: 'income' }),
+    row(3, { tags: [{ id: 3 }], categoryId: 3 }), row(4, { tags: [] }), row(5)];
+  assert.deepEqual(ids(rows, { tagIds: ['1', '3'] }), [1, 3]);
+  assert.deepEqual(ids(rows, { tagIds: ['2'], types: ['expense'] }), [1]);
+  assert.deepEqual(ids(rows, { tagIds: ['2'], categoryIds: ['3'] }), []);
+  assert.deepEqual(ids(rows, { tagIds: ['3'], categoryIds: ['3'], description: 'test' }), [3]);
+  assert.deepEqual(ids(rows, { tagIds: ['999'] }), []);
+  assert.deepEqual(ids(rows, { tagIds: [] }), [1, 2, 3, 4, 5]);
+});
+
 test('latest-rate conversion crosses via CNY, rounds symmetrically to cents and never mutates original data', () => {
   const hkd = row(1, { currency: 'HKD', amount: 11000 });
   assert.equal(signedFilterAmount(hkd, 'CNY', true, rates), -10000);

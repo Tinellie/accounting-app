@@ -8,17 +8,20 @@ import dayjs from 'dayjs';
 import TransactionTypeSelector from './TransactionEntryForm/TransactionTypeSelector';
 import SourceAccountField from './TransactionEntryForm/SourceAccountField';
 import TransactionDetailField from './TransactionEntryForm/TransactionDetailField';
+import TransactionTagField from './TransactionTagField';
+import type { TagRecord } from '../lib/tags';
 import type { AccountOption, CategoryOption } from './TransactionEntryForm/types';
 import { formatMinorUnits, toMinorUnits } from '../lib/money';
 import { initialTransactionFilters, type ExchangeRates, type TransactionFilters as FilterValues } from '../lib/transaction-filters';
 
 export default function TransactionFilters({
-  value, onChange, accounts, categories, currencies, extent, error, rateError, rates, loading, onRequestRates, onRetryRates,
+  value, onChange, accounts, categories, tags, currencies, extent, error, rateError, rates, loading, onRequestRates, onRetryRates,
 }: {
   value: FilterValues;
   onChange: (value: FilterValues) => void;
   accounts: AccountOption[];
   categories: CategoryOption[];
+  tags: TagRecord[];
   currencies: string[];
   extent: [number, number] | null;
   error: string | null;
@@ -91,8 +94,11 @@ export default function TransactionFilters({
       <Stack spacing={2}>
         <TransactionTypeSelector multiple type={value.types} onTypeChange={(types) => update({ types })} fieldId={`${prefix}-types`} />
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)' }, gap: 2, alignItems: 'start' }}>
-          <TransactionDetailField multiple categories={categories} categoryId={value.categoryIds} onCategoryChange={(categoryIds) => update({ categoryIds })}
-            fieldId={`${prefix}-categories`} labelOverride="筛选分类" />
+          <Stack spacing={2} sx={{ minWidth: 0 }}>
+            <TransactionDetailField multiple categories={categories} categoryId={value.categoryIds} onCategoryChange={(categoryIds) => update({ categoryIds })}
+              fieldId={`${prefix}-categories`} labelOverride="筛选分类" />
+            <TransactionTagField tags={tags} value={value.tagIds} onChange={(tagIds) => update({ tagIds })} label="筛选标签" fieldId={`${prefix}-tags`} />
+          </Stack>
           <TextField fullWidth size="small" label="描述检索" placeholder="输入交易描述" value={value.description} onChange={(event) => update({ description: event.target.value })} />
           <SourceAccountField multiple accounts={accounts} type="expense" sourceAccountId={value.accountIds} onAccountChange={(accountIds) => update({ accountIds })}
             fieldId={`${prefix}-accounts`} labelOverride="筛选账户" />

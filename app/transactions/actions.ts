@@ -5,13 +5,10 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/src/db";
 import { accounts, categories, transactions } from "@/src/db/schema";
-import { createTransactionSchema, positiveIdSchema } from "@/src/lib/validations";
+import { createTransactionSchema, positiveIdSchema, transactionIdsSchema } from "@/src/lib/validations";
+import { TransactionTagError, updateTransactionTags } from "@/src/lib/transaction-tags";
 
 const updateTransactionSchema = createTransactionSchema.extend({ id: positiveIdSchema });
-const transactionIdsSchema = z.array(positiveIdSchema)
-  .min(1, "请先选择交易")
-  .max(500, "一次最多处理 500 笔交易")
-  .refine((ids) => new Set(ids).size === ids.length, "交易编号不能重复");
 const bulkCategorySchema = z.object({
   transactionIds: transactionIdsSchema,
   categoryId: positiveIdSchema,
@@ -27,6 +24,19 @@ type TransactionActionState = {
 };
 
 class TransactionActionError extends Error {}
+
+export async function bulkUpdateTransactionTagsAction(input: unknown): Promise<TransactionActionState> {
+  try {
+    const result = updateTransactionTags(db, input);
+    revalidatePath("/transactions");
+    revalidatePath("/categories");
+    return { success: true, message: `已为 ${result.transactionIds.length} 笔交易${result.operation === 'add' ? '添加' : '移除'}所选标签` };
+  } catch (error) {
+    if (error instanceof TransactionTagError) return { success: false, message: error.message };
+    console.error("[transaction-tags] Bulk update failed", error);
+    return { success: false, message: "批量修改标签失败，请稍后重试" };
+  }
+}
 
 /**
  * 校验并保存一笔交易，同时更新相关账户余额。

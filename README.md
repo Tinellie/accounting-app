@@ -86,6 +86,42 @@ server fetches the full 180-day range.
 
 Run sorting tests with `npm run test:category-chart`.
 
+## Tag Management
+
+The categories page shows **标签** beneath income categories. Tags support
+create/edit/delete, icons, colors and two hierarchy levels. Child tags inherit
+their parent's color unless explicitly overridden. Parents with children cannot
+be deleted or moved under another parent; tags already linked to transactions
+cannot be deleted. Each tag has a display name and a separately editable unique
+code, like categories. Codes accept 1-50 letters, digits, hyphens or underscores
+and are normalized to lowercase. Names remain globally unique.
+
+For an existing database, run `npm run db:backfill-tag-hierarchy` once before
+starting the updated app. This repeatable additive migration preserves existing
+tags and transaction-tag links. Re-run it when upgrading to tag codes: existing
+tags receive stable `tag-ID` codes (with a suffix if needed to avoid collisions),
+while already assigned codes are preserved. New databases use the updated Drizzle schema.
+Run `npm run test:tags` for isolated migration, hierarchy and CRUD tests.
+On the transactions page, **筛选标签** sits below the category filter. Select
+multiple tags by name or code: any selected exact tag matches (parents do not
+implicitly match children), combined with the other filters using AND. Empty
+selection includes untagged transactions.
+
+The sticky selection toolbar has a **批量标签** checkbox selector to the right of
+category. Each checkbox reflects the selected visible transactions: checked if
+all have the tag, empty if none do, and a dash if only some do. Clicking checked
+removes the tag from all selected transactions; clicking empty or partial adds
+it to all. Changes save immediately, without replacing other tags or changing
+balances. While saving, tag changes are locked until refreshed state arrives;
+errors are shown without claiming success. Linked tags appear as themed chips
+between the category/type line and date/time on each transaction.
+This applies to saved transactions, not import previews.
+Saved edits use the Server Action's revalidated response directly, without a
+second client-side route refresh. Unchanged transaction rows are memoized so
+selection changes and opening the editor do not re-render the entire ledger.
+Tag batches are atomic, validate every transaction/tag, and are limited to 500
+transactions and 500 tags. `npm run test:tags` also tests these operations.
+
 ## Transaction List Filters
 
 The **全部流水** list has a filter panel (import previews are unchanged):

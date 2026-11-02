@@ -10,6 +10,11 @@ const accountCodeSchema = str
 
 export const positiveIdSchema = int.positive().refine(Number.isSafeInteger, "编号无效");
 
+export const transactionIdsSchema = z.array(positiveIdSchema)
+  .min(1, "请先选择交易")
+  .max(500, "一次最多处理 500 笔交易")
+  .refine((ids) => new Set(ids).size === ids.length, "交易编号不能重复");
+
 const moneyInputSchema = str
   .regex(/^-?\d+(?:\.\d{1,2})?$/, "请输入最多两位小数的金额")
   .transform((value, context) => {
@@ -68,6 +73,14 @@ export const createCategorySchema = z.object({
 export const updateCategorySchema = createCategorySchema.extend({
   id: positiveIdSchema,
 });
+
+export const createTagSchema = createCategorySchema
+  .pick({ name: true, parentId: true, icon: true, color: true })
+  .extend({
+    code: str
+      .regex(/^[A-Za-z0-9_-]{1,50}$/, "标签代码只能包含英文字母、数字、连字符和下划线")
+      .transform((value) => value.toLowerCase()),
+  });
 
 export const createTransactionSchema = z
   .object({

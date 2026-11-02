@@ -1,8 +1,9 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { memo, useId, useState } from 'react';
 import Image from 'next/image';
-import { Alert, AlertTitle, Box, Checkbox, Collapse, IconButton, Typography } from '@mui/material';
+import { Alert, AlertTitle, Box, Checkbox, Chip, Collapse, IconButton, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
@@ -10,6 +11,7 @@ import type { transactions } from '@/src/db/schema';
 import { formatMinorUnits } from '@/src/lib/money';
 import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
 import { activeOcrErrors } from '@/src/lib/wechat-import/preview';
+import type { TagRecord } from '@/src/lib/tags';
 
 /**
  * 组件：交易列表项
@@ -21,6 +23,7 @@ export type TransactionListItemData = Pick<
   'id' | 'type' | 'amount' | 'occurredAt' | 'notes' | 'data' | 'accountId' | 'toAccountId'
 > & {
   isRefund?: boolean;
+  tags?: TagRecord[];
   accountName: string;
   currency: string;
   categoryId: number | null;
@@ -35,7 +38,7 @@ export type TransactionListItemData = Pick<
 type TransactionListItemProps = {
   transaction: TransactionListItemData | PreviewTransaction;
   selected?: boolean;
-  onSelectedChange?: (selected: boolean, exclusive?: boolean) => void;
+  onSelectedChange?: (id: number, selected: boolean, exclusive?: boolean) => void;
   showDebugData?: boolean;
 };
 
@@ -46,7 +49,10 @@ const transactionDisplay = {
   adjustment: { label: '调整' },
 } as const;
 
-export default function TransactionListItem({ transaction, selected, onSelectedChange, showDebugData = true }: TransactionListItemProps) {
+const ledgerDateFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' });
+const previewDateFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Shanghai' });
+
+function TransactionListItem({ transaction, selected, onSelectedChange, showDebugData = true }: TransactionListItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const detailsId = useId();
@@ -77,7 +83,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         if (event.altKey && onSelectedChange && event.target instanceof Element
           && !event.target.closest('button, input, a, [role="button"]')) {
           event.preventDefault();
-          onSelectedChange(true, true);
+          onSelectedChange(transaction.id, true, true);
         }
       }}
       sx={ocrErrors.length || (!manuallyClassified && aiCategory?.status === 'error') ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
@@ -126,7 +132,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         size="small"
         checked={selected ?? false}
         disabled={!onSelectedChange}
-        onChange={(event) => onSelectedChange?.(event.target.checked, event.nativeEvent instanceof MouseEvent && event.nativeEvent.altKey)}
+        onChange={(event) => onSelectedChange?.(transaction.id, event.target.checked, event.nativeEvent instanceof MouseEvent && event.nativeEvent.altKey)}
         slotProps={{ input: { 'aria-label': `选择${display.label}记录` } }}
         sx={{
           gridColumn: 1,
@@ -174,9 +180,18 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
             </>
           ) : ' · 未分类'}
         </Typography>
+        {'tags' in transaction && transaction.tags?.length ? (
+          <Box aria-label="流水标签" sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, my: 0.5 }}>
+            {transaction.tags.map((tag) => {
+              const color = tag.color ?? fallbackCategoryColor(tag.parentId ?? tag.id);
+              return <Chip key={tag.id} label={tag.name} title={`${tag.name} · ${tag.code}`} size="small" variant="outlined"
+                sx={{ maxWidth: '100%', fontWeight: 400, borderColor: color, bgcolor: alpha(color, 0.1) }} />;
+            })}
+          </Box>
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {transaction.occurredAt
-            ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', ...(debug ? { timeZone: 'Asia/Shanghai' } : {}) }).format(transaction.occurredAt)
+            ? (debug ? previewDateFormatter : ledgerDateFormatter).format(transaction.occurredAt)
             : <Box component="span" sx={{ color: 'error.main' }}>日期待修正</Box>}
         </Typography>
       </Box>
@@ -273,3 +288,5 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
     </Box>
   );
 }
+
+export default memo(TransactionListItem);

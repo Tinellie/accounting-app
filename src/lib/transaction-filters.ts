@@ -2,12 +2,13 @@ import { z } from 'zod';
 import type { TransactionListItemData } from '../components/TransactionListItem';
 import { toMinorUnits } from './money';
 
-export type FilterTransaction = Pick<TransactionListItemData, 'id' | 'type' | 'amount' | 'currency' | 'notes' | 'accountId' | 'toAccountId' | 'occurredAt' | 'categoryId'>;
+export type FilterTransaction = Pick<TransactionListItemData, 'id' | 'type' | 'amount' | 'currency' | 'notes' | 'accountId' | 'toAccountId' | 'occurredAt' | 'categoryId' | 'tags'>;
 export type TransactionFilters = {
   description: string;
   types: FilterTransaction['type'][];
   accountIds: string[];
   categoryIds: string[];
+  tagIds: string[];
   currency: string;
   convert: boolean;
   minimum: string;
@@ -16,7 +17,7 @@ export type TransactionFilters = {
   endDate: string;
 };
 export const initialTransactionFilters: TransactionFilters = {
-  description: '', types: [], accountIds: [], categoryIds: [], currency: 'CNY', convert: true,
+  description: '', types: [], accountIds: [], categoryIds: [], tagIds: [], currency: 'CNY', convert: true,
   minimum: '', maximum: '', startDate: '', endDate: '',
 };
 
@@ -59,6 +60,7 @@ export function filterTransactions<T extends FilterTransaction>(rows: T[], filte
     if (query && !(row.notes ?? '').toLocaleLowerCase().includes(query)) return false;
     if (filters.types.length && !filters.types.includes(row.type)) return false;
     if (filters.categoryIds.length && (row.categoryId === null || !filters.categoryIds.includes(String(row.categoryId)))) return false;
+    if (filters.tagIds.length && !row.tags?.some((tag) => filters.tagIds.includes(String(tag.id)))) return false;
     if (filters.accountIds.length && !filters.accountIds.includes(String(row.accountId))
       && !(row.type === 'transfer' && filters.accountIds.includes(String(row.toAccountId)))) return false;
     if (start !== null && row.occurredAt.getTime() < start) return false;
