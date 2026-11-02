@@ -48,6 +48,11 @@ export default function TransactionsPage() {
     .orderBy(asc(categories.sortOrder), asc(categories.name)) 
     .all();
 
+  const filterAccountOptions = db.select({
+    id: accounts.id, code: accounts.code, name: accounts.name, currency: accounts.currency,
+    type: accounts.type, icon: accounts.icon,
+  }).from(accounts).orderBy(asc(accounts.name)).all();
+
   // 读取交易流水，并补充账户、分类、上级分类和转入账户的显示信息。
   const transactionRows = db
     .select({
@@ -91,7 +96,7 @@ export default function TransactionsPage() {
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
       <TransactionsList transactions={transactionRows.map((row) => ({
         ...row, isRefund: row.type === 'expense' && row.amount < 0,
-      }))} accounts={accountOptions} categories={categoryOptions} />
+      }))} accounts={accountOptions} categories={categoryOptions} filterAccounts={filterAccountOptions} />
     </Stack>
   );
 }

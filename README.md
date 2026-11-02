@@ -86,6 +86,42 @@ server fetches the full 180-day range.
 
 Run sorting tests with `npm run test:category-chart`.
 
+## Transaction List Filters
+
+The **全部流水** list has a filter panel (import previews are unchanged):
+multi-select transaction types, accounts and categories, case-insensitive description search,
+an amount popover, and inclusive start/end MUI X date pickers. Empty type/account
+selections mean all (including empty category selection). Transaction types appear
+at the top; categories, description search and accounts share the second row,
+with the description in the middle.
+The ledger rows sit in a bordered, independently scrollable container with a
+fixed height of 90% of the viewport below
+the filters, so scrolling through transactions does not move the filter panel.
+Short result sets leave blank space rather than shrinking the container.
+The selection/edit toolbar stays sticky at the bottom inside this container,
+instead of being fixed to the browser viewport.
+Import previews retain their existing scrolling behavior.
+Category selections match the chosen category IDs exactly; parent and child
+categories can be selected independently. Transfers match either account, and archived accounts remain
+available for historical filtering. Changing filters clears selection; select-all
+and batch operations apply only to currently visible rows.
+
+Amount filtering uses the **signed displayed value**: expenses are negative,
+income/refunds positive, and transfers/adjustments keep their stored sign.
+The range slider and precise two-decimal inputs include both endpoints. Blank
+limits are unbounded. The default currency is CNY; the menu includes currencies
+that occur in the ledger. Conversion is enabled by default and uses the latest
+daily public Frankfurter reference rates (server cache: one hour), rounded to
+cents for filtering only. No transaction data is sent to the rate provider and
+original amounts are never changed. The displayed quote date is the oldest
+among the returned rates; these are not historical transaction/execution rates.
+Disabling conversion restricts results to the selected original currency.
+Missing/unsupported rates and invalid ranges produce explicit errors rather
+than assuming a rate or silently omitting unmatched currencies.
+
+Run `npm run test:transaction-filters` for filtering, conversion, sign, rounding,
+date-boundary and error-handling tests.
+
 ## Alipay HK Screenshot Import
 
 **从支付宝(HK)截图导入** shares the screenshot OCR, AI categorization, editable

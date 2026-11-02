@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Autocomplete, Avatar, Box, FormHelperText, InputAdornment, TextField, Typography } from '@mui/material';
+import { Autocomplete, Avatar, Box, Checkbox, Chip, FormHelperText, InputAdornment, TextField, Typography } from '@mui/material';
 import CategoryIcon from '@/src/components/CategoryIcon';
 import { accountTypes } from '@/src/components/AccountManager/types';
 import { accountIconUrl } from '@/src/lib/account-icon-url';
@@ -12,6 +12,7 @@ import type { AccountOption, CategoryOption, TransactionType } from './types';
  * 功能：支出和收入时供用户选择分类，转账时选择转入账户。
  */
 type TransactionDetailFieldProps = {
+  multiple?: false;
   type: TransactionType;
   accounts: AccountOption[];
   categories: CategoryOption[];
@@ -22,10 +23,76 @@ type TransactionDetailFieldProps = {
   onDestinationChange: (accountId: string) => void;
   fieldId?: string;
   disabled?: boolean;
+} | {
+  multiple: true;
+  categories: CategoryOption[];
+  categoryId: string[];
+  onCategoryChange: (categoryIds: string[]) => void;
+  fieldId?: string;
+  disabled?: boolean;
+  labelOverride?: string;
 };
 
 // 转账时选择转入账户，收入或支出时选择对应分类。
-export default function TransactionDetailField({
+export default function TransactionDetailField(props: TransactionDetailFieldProps) {
+  if (props.multiple) return <MultipleCategoryField {...props} />;
+  return <SingleTransactionDetailField {...props} />;
+}
+
+function MultipleCategoryField({ categories, categoryId, onCategoryChange, fieldId, disabled, labelOverride }: Extract<TransactionDetailFieldProps, { multiple: true }>) {
+  const orderedCategories = [...categories].filter((category) => category.parentId === null)
+    .sort((a, b) => a.type.localeCompare(b.type) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    .flatMap((category) => [category, ...categories.filter((child) => child.parentId === category.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))]);
+  return (
+    <Autocomplete<CategoryOption, true>
+      multiple
+      disableCloseOnSelect
+      sx={{
+        minWidth: 0,
+        '& .MuiAutocomplete-inputRoot': { height: 40, flexWrap: 'nowrap', overflow: 'hidden' },
+      }}
+      renderValue={(selected, getItemProps) => (
+        <Box sx={{ display: 'flex', overflow: 'hidden', maxWidth: 'calc(100% - 36px)', minWidth: 0, flexShrink: 1 }}>
+          {selected.map((category, index) => {
+            const { key, ...itemProps } = getItemProps({ index });
+            return <Chip key={key} {...itemProps} label={category.name} size="small" sx={{ flexShrink: 0, maxWidth: '100%', mr: 0.5 }} />;
+          })}
+        </Box>
+      )}
+      fullWidth
+      size="small"
+      id={fieldId}
+      disabled={disabled ?? categories.length === 0}
+      options={orderedCategories}
+      value={orderedCategories.filter((category) => categoryId.includes(String(category.id)))}
+      onChange={(_, selected) => onCategoryChange(selected.map((category) => String(category.id)))}
+      getOptionLabel={(category) => category.name}
+      isOptionEqualToValue={(option, value) => option.id === value.id}
+      groupBy={(category) => category.type === 'expense' ? '支出' : '收入'}
+      filterOptions={(options, state) => filterCodeFirst(options, state.inputValue)}
+      noOptionsText="没有匹配的分类"
+      renderOption={(props, category, { selected }) => {
+        const { key, ...optionProps } = props;
+        const parent = categories.find((item) => item.id === category.parentId);
+        return (
+          <Box component="li" key={key} {...optionProps} sx={{ display: 'flex', gap: 1 }}>
+            <Checkbox checked={selected} size="small" tabIndex={-1} sx={{ pointerEvents: 'none' }} />
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, ml: category.parentId === null ? 0 : 2 }}>
+              <Box component="span" sx={{ width: 4, height: 20, flexShrink: 0, bgcolor: category.color ?? parent?.color ?? fallbackCategoryColor(parent?.id ?? category.id) }} />
+              <CategoryIcon name={category.icon ?? 'Category'} color="action" fontSize="small" />
+              <Typography component="span" noWrap>{category.name}</Typography>
+            </Box>
+            {category.code ? <Typography variant="caption" color="text.secondary">{category.code}</Typography> : null}
+          </Box>
+        );
+      }}
+      renderInput={(params) => <TextField {...params} label={labelOverride ?? '分类'} placeholder={categoryId.length ? '' : '全部分类'} />}
+    />
+  );
+}
+
+function SingleTransactionDetailField({
   type,
   accounts,
   categories,
@@ -36,7 +103,7 @@ export default function TransactionDetailField({
   onDestinationChange,
   fieldId,
   disabled,
-}: TransactionDetailFieldProps) {
+}: Extract<TransactionDetailFieldProps, { multiple?: false }>) {
   // 当前交易是否为转账，决定显示转入账户还是分类。
   const isTransfer = type === 'transfer';
   // 当前输入控件使用的唯一 ID。

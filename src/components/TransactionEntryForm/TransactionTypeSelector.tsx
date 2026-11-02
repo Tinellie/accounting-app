@@ -6,8 +6,16 @@ import type { TransactionType } from './types';
  * 功能：让用户在支出、收入和转账之间切换。
  */
 type TransactionTypeSelectorProps = {
+  multiple?: false;
   type: TransactionType;
   onTypeChange: (type: TransactionType) => void;
+} | {
+  multiple: true;
+  type: (TransactionType | 'adjustment')[];
+  onTypeChange: (type: (TransactionType | 'adjustment')[]) => void;
+};
+
+type SelectorProps = TransactionTypeSelectorProps & {
   fieldId?: string;
   allowTransfer?: boolean;
 };
@@ -19,15 +27,21 @@ const transactionTypes: { value: TransactionType; label: string }[] = [
 ];
 
 // 提供交易类型切换，并将当前类型放入表单数据。
-export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 'txn-type', allowTransfer = true }: TransactionTypeSelectorProps) {
+export default function TransactionTypeSelector(props: SelectorProps) {
+  const { type, fieldId = 'txn-type', allowTransfer = true } = props;
+  const options = props.multiple
+    ? [...transactionTypes.map((item) => ({ ...item, label: item.label.split(' ')[0] })), { value: 'adjustment' as const, label: '调整' }]
+    : transactionTypes;
   return (
     <Box className="txn-type-field">
       <ToggleButtonGroup
         id={fieldId}
-        exclusive
+        exclusive={!props.multiple}
         value={type}
-        onChange={(_, nextType: TransactionType | null) => {
-          if (nextType) onTypeChange(nextType);
+        onChange={(_, nextType: TransactionType | 'adjustment' | (TransactionType | 'adjustment')[] | null) => {
+          if (props.multiple) {
+            if (Array.isArray(nextType)) props.onTypeChange(nextType);
+          } else if (nextType && !Array.isArray(nextType) && nextType !== 'adjustment') props.onTypeChange(nextType);
         }}
         aria-label="交易类型"
         size="small"
@@ -37,13 +51,15 @@ export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 
           },
         })}
       >
-        {transactionTypes.filter((item) => allowTransfer || item.value !== 'transfer').map((transactionType) => (
+        {options.filter((item) => allowTransfer || item.value !== 'transfer').map((transactionType) => (
           <ToggleButton
             className="txn-type-option"
             key={transactionType.value}
             value={transactionType.value}
             sx={(theme) => {
-              const colors = theme.palette.transaction[transactionType.value];
+              const colors = transactionType.value === 'adjustment'
+                ? { main: theme.palette.primary.main, dark: theme.palette.primary.dark, light: theme.palette.action.hover }
+                : theme.palette.transaction[transactionType.value];
               return {
                 '&:hover': {
                   backgroundColor: colors.light,
@@ -61,7 +77,7 @@ export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
-      <input id={`${fieldId}-value`} type="hidden" name="type" value={type} />
+      {!props.multiple ? <input id={`${fieldId}-value`} type="hidden" name="type" value={props.type} /> : null}
     </Box>
   );
 }

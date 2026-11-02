@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, useTransition } from 'react';
+import { useEffect, useId, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, Paper, Snackbar, Stack, Tooltip, Typography } from '@mui/material';
 import {
@@ -26,6 +26,8 @@ import TransactionListItem, { type TransactionListItemData } from '@/src/compone
 import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
 import { assignPreviewAccount, assignPreviewCategory, editPreviewRow, updateRowSelection } from '@/src/lib/wechat-import/preview';
 import { createTransactionSchema } from '@/src/lib/validations';
+import TransactionFilters from './TransactionFilters';
+import { amountFilterExtent, exchangeRateSchema, filterTransactions, initialTransactionFilters, type ExchangeRates, type TransactionFilters as FilterValues } from '../lib/transaction-filters';
 
 /**
  * 组件：交易列表
@@ -37,6 +39,7 @@ type EditableTransactionsListProps = {
   accounts: AccountOption[];
   categories: CategoryOption[];
   showDebugData?: boolean;
+  filterAccounts?: AccountOption[];
 };
 
 type TransactionsListProps = (EditableTransactionsListProps & { mode?: 'default' }) | {
@@ -55,12 +58,15 @@ export default function TransactionsList(props: TransactionsListProps) {
   return <EditableTransactionsList {...props} />;
 }
 
-function TransactionRows({ transactions, preview = false, selectedIds, onSelectedChange, showDebugData = true }: {
+function TransactionRows({ transactions, preview = false, selectedIds, onSelectedChange, showDebugData = true, filters, total, actions }: {
   transactions: (TransactionListItemData | PreviewTransaction)[];
   preview?: boolean;
   selectedIds?: Set<number>;
   onSelectedChange?: (id: number, selected: boolean, exclusive?: boolean) => void;
   showDebugData?: boolean;
+  filters?: ReactNode;
+  total?: number;
+  actions?: ReactNode;
 }) {
   const headingId = useId();
   const groups: { key: string; label: string; transactions: (TransactionListItemData | PreviewTransaction)[] }[] = [];
@@ -72,12 +78,30 @@ function TransactionRows({ transactions, preview = false, selectedIds, onSelecte
     else groups.push({ key: `${label}-${transaction.id}`, label, transactions: [transaction] });
   });
   return (
-    <Box id={preview ? undefined : 'txn-list'} component="section" aria-labelledby={headingId} sx={{ pb: preview ? 0 : { xs: 22, md: 12 } }}>
+    <Box id={preview ? undefined : 'txn-list'} component="section" aria-labelledby={headingId}>
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
         <Typography id={headingId} component="h2" variant="h2">{preview ? '识别预览' : '全部流水'}</Typography>
-        <Typography variant="body2" color="text.secondary">{transactions.length} 笔</Typography>
+        <Typography variant="body2" color="text.secondary">{total !== undefined && total !== transactions.length ? `${transactions.length} / ${total}` : transactions.length} 笔</Typography>
       </Box>
-      {transactions.length === 0 ? <Typography color="text.secondary" sx={{ py: 3 }}>暂无交易记录</Typography> : (
+      {filters}
+      <Box
+        role={preview ? undefined : 'region'}
+        aria-label={preview ? undefined : '流水滚动列表'}
+        tabIndex={preview ? undefined : 0}
+        sx={preview ? undefined : {
+          height: '90dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflowY: 'auto',
+          overscrollBehaviorY: 'contain',
+          scrollbarGutter: 'stable',
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+        }}
+      >
+      <Box sx={preview ? undefined : { p: { xs: 1, md: 1.5 }, flex: '1 0 auto' }}>
+      {transactions.length === 0 ? <Typography color="text.secondary" sx={{ py: 3 }}>{total ? '没有符合筛选条件的交易' : '暂无交易记录'}</Typography> : (
         <Stack spacing={2}>
           {groups.map((group) => (
             <Box key={group.key}>
@@ -99,6 +123,9 @@ function TransactionRows({ transactions, preview = false, selectedIds, onSelecte
           ))}
         </Stack>
       )}
+      </Box>
+      {actions}
+      </Box>
     </Box>
   );
 }
@@ -106,6 +133,43 @@ function TransactionRows({ transactions, preview = false, selectedIds, onSelecte
 function EditableTransactionsList(props: TransactionsListProps) {
   const { transactions, accounts, categories, showDebugData } = props;
   const preview = props.mode === 'preview';
+  const [filters, setFilters] = useState<FilterValues>({ ...initialTransactionFilters });
+  const [rateRequested, setRateRequested] = useState(false);
+  const [rateAttempt, setRateAttempt] = useState(0);
+  const [rateState, setRateState] = useState<{ rates: ExchangeRates | null; error: string | null }>({ rates: null, error: null });
+  useEffect(() => {
+    if (preview || !rateRequested) return;
+    const abort = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch('/api/exchange-rates', { signal: abort.signal });
+        const result: unknown = await response.json();
+        if (!response.ok) throw new Error('获取最新汇率失败，请重试或关闭币值转换');
+        const rates = exchangeRateSchema.parse(result);
+        if (!abort.signal.aborted) setRateState({ rates, error: null });
+      } catch (error) {
+        if (!abort.signal.aborted) setRateState({ rates: null, error: error instanceof Error ? error.message : '获取汇率失败' });
+      }
+    }
+    void load();
+    return () => abort.abort();
+  }, [preview, rateRequested, rateAttempt]);
+  let filterError: string | null = null;
+  let visibleTransactions = transactions;
+  let extent: [number, number] | null = null;
+  if (props.mode !== 'preview') {
+    try {
+      visibleTransactions = filterTransactions(props.transactions, filters, rateState.rates);
+    } catch (error) {
+      visibleTransactions = [];
+      filterError = error instanceof Error ? error.message : '筛选条件无效';
+    }
+    try {
+      extent = amountFilterExtent(props.transactions, filters, rateState.rates);
+    } catch (error) {
+      if (rateRequested && !rateState.error) filterError ??= error instanceof Error ? error.message : '换算金额失败';
+    }
+  }
   const fieldPrefix = useId();
   const router = useRouter();
   // 当前勾选的交易 ID，用于计算批量操作的目标。
@@ -126,7 +190,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
   const disabled = isPending || (props.mode === 'preview' && props.disabled === true);
 
   // 当前选中的交易记录。
-  const selectedTransactions = transactions.filter((transaction) => selectedIds.has(transaction.id));
+  const selectedTransactions = visibleTransactions.filter((transaction) => selectedIds.has(transaction.id));
   // 首笔选中交易的类型，用于判断批量操作是否适用。
   const selectedType = selectedTransactions[0]?.type;
   // 仅当所选记录全为相同方向的收支交易时才允许分类操作。
@@ -136,7 +200,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
   const containsRefund = selectedTransactions.some((transaction) => transaction.type === 'expense' && (transaction.amount ?? 0) < 0);
   const canReverse = canChangeCategory && selectedTransactions.every((row) => row.amount !== null && row.amount > 0);
   // 所有交易均被选中时，全选框显示选中状态。
-  const allSelected = transactions.length > 0 && selectedTransactions.length === transactions.length;
+  const allSelected = visibleTransactions.length > 0 && selectedTransactions.length === visibleTransactions.length;
   // 反转后的目标类型和该类型下的默认一级分类。
   const reverseType = selectedType === 'expense' ? 'income' : 'expense';
   const reverseCategory = categories
@@ -179,7 +243,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
   }
 
   function toggleAll() {
-    setSelectedIds(allSelected ? new Set() : new Set(transactions.map((transaction) => transaction.id)));
+    setSelectedIds(allSelected ? new Set() : new Set(visibleTransactions.map((transaction) => transaction.id)));
   }
 
   function handleCategoryChange(categoryValue: string) {
@@ -272,18 +336,23 @@ function EditableTransactionsList(props: TransactionsListProps) {
 
   return (
     <>
-      <TransactionRows transactions={transactions} preview={preview} selectedIds={selectedIds} onSelectedChange={disabled ? undefined : changeRowSelection} showDebugData={showDebugData} />
-
-      <Paper
+      <TransactionRows transactions={visibleTransactions} preview={preview} selectedIds={selectedIds} onSelectedChange={disabled ? undefined : changeRowSelection} showDebugData={showDebugData}
+        total={preview ? undefined : transactions.length}
+        filters={props.mode !== 'preview' ? <TransactionFilters value={filters} onChange={(value) => { setFilters(value); setSelectedIds(new Set()); }}
+          accounts={props.filterAccounts ?? accounts} categories={categories} currencies={[...new Set(['CNY', ...props.transactions.map((row) => row.currency)])].sort()}
+          extent={extent} error={filterError} rateError={rateState.error} rates={rateState.rates}
+          loading={rateRequested && !rateState.rates && !rateState.error}
+          onRequestRates={() => setRateRequested(true)}
+          onRetryRates={() => { setRateState({ rates: null, error: null }); setRateAttempt((attempt) => attempt + 1); }} /> : null}
+        actions={<Paper
         component="section"
         aria-label="所选交易操作"
         elevation={8}
         sx={{
-          position: preview ? 'sticky' : 'fixed',
-          left: preview ? 0 : { xs: 0, md: 256 },
-          right: 0,
+          position: 'sticky',
+          flexShrink: 0,
           bottom: 0,
-          zIndex: (theme) => preview ? 1 : theme.zIndex.appBar,
+          zIndex: 1,
           px: { xs: 1.5, md: 3 },
           py: 1.5,
           borderRadius: 0,
@@ -382,7 +451,7 @@ function EditableTransactionsList(props: TransactionsListProps) {
             </Box>
           </Tooltip>
         </Box>
-      </Paper>
+      </Paper>} />
 
       <Dialog open={confirmationAction === 'reverse'} onClose={() => setConfirmationAction(null)} maxWidth="xs" fullWidth>
         <DialogTitle>反转收支类型</DialogTitle>

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:transaction-filters": "node --experimental-transform-types --test scripts/transaction-filters.test.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/generate-category-icon-names.mjs",
     "build": "next build",
