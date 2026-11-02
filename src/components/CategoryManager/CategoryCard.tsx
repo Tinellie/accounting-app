@@ -1,4 +1,4 @@
-import { Box, Paper } from '@mui/material';
+import { Box } from '@mui/material';
 import CategoryRow from './CategoryRow';
 import SortableCategoryGroup from './SortableCategoryGroup';
 import { fallbackCategoryColor } from '@/src/lib/category-colors';
@@ -22,12 +22,10 @@ export default function CategoryCard({ category, subcategories, onEdit, dragHand
   const rootColor = category.color ?? fallbackCategoryColor(category.id);
 
   return (
-    <Paper
+    <Box
       id={`category-${category.id}`}
       className="category-card"
       component="article"
-      variant="outlined"
-      sx={{ p: 2, borderColor: 'divider' }}
     >
       <CategoryRow
         category={category}
@@ -37,7 +35,7 @@ export default function CategoryCard({ category, subcategories, onEdit, dragHand
         dragHandle={dragHandle}
       />
       {subcategories.length > 0 ? (
-        <Box sx={{ mt: 1.5, ml: { xs: 1, sm: 3 }, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
+        <Box sx={{ mt: 0.5, ml: { xs: 1, sm: 3 }, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
           <SortableCategoryGroup id={`category-children-${category.id}`} categories={subcategories}>
             {(child, dragHandle) => (
               <CategoryRow
@@ -51,6 +49,6 @@ export default function CategoryCard({ category, subcategories, onEdit, dragHand
           </SortableCategoryGroup>
         </Box>
       ) : null}
-    </Paper>
+    </Box>
   );
 }

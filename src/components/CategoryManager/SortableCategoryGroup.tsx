@@ -75,7 +75,7 @@ export default function SortableCategoryGroup({ id, categories, children }: Sort
   return (
     <DndContext id={id} sensors={sensors} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedCategoryIds} strategy={verticalListSortingStrategy}>
-        <Stack spacing={1.5}>
+        <Stack spacing={0.5}>
           {orderedCategories.map((category) => (
             <SortableCategoryItem key={category.id} category={category} disabled={isPending}>
               {(dragHandle) => children(category, dragHandle)}

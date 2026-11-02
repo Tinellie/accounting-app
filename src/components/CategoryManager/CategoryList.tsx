@@ -1,4 +1,4 @@
-import { Alert, Box, Stack, Typography } from '@mui/material';
+import { Alert, Box, Paper, Stack, Typography } from '@mui/material';
 import CategoryCard from './CategoryCard';
 import SortableCategoryGroup from './SortableCategoryGroup';
 import { categoryTypes, type CategoryRecord } from './types';
@@ -31,20 +31,22 @@ export default function CategoryList({ categories, onEdit }: CategoryListProps) 
             <Typography id={`category-${type.value}-title`} component="h2" variant="h2" sx={{ mb: 1.5 }}>
               {type.label}分类
             </Typography>
-            {typeRoots.length === 0 ? (
-              <Typography color="text.secondary" sx={{ py: 1.5 }}>暂无{type.label}分类</Typography>
-            ) : (
-              <SortableCategoryGroup id={`category-roots-${type.value}`} categories={typeRoots}>
-                {(category, dragHandle) => (
-                  <CategoryCard
-                    category={category}
-                    subcategories={categories.filter((item) => item.parentId === category.id)}
-                    onEdit={onEdit}
-                    dragHandle={dragHandle}
-                  />
-                )}
-              </SortableCategoryGroup>
-            )}
+            <Paper variant="outlined" sx={{ p: 2, borderColor: 'divider' }}>
+              {typeRoots.length === 0 ? (
+                <Typography color="text.secondary">暂无{type.label}分类</Typography>
+              ) : (
+                <SortableCategoryGroup id={`category-roots-${type.value}`} categories={typeRoots}>
+                  {(category, dragHandle) => (
+                    <CategoryCard
+                      category={category}
+                      subcategories={categories.filter((item) => item.parentId === category.id)}
+                      onEdit={onEdit}
+                      dragHandle={dragHandle}
+                    />
+                  )}
+                </SortableCategoryGroup>
+              )}
+            </Paper>
           </Box>
         );
       })}
