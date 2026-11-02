@@ -383,6 +383,8 @@ regularly; local Docker volumes alone are not disaster recovery.
 
 The image initializes an empty schema using committed Drizzle migrations,
 then starts the standalone server as the unprivileged `node` user.
+It includes system fonts for Chinese/English PDF rendering. CI checks actual
+PDF text extraction and rendered pixels inside the production image.
 Already-managed databases apply pending migrations on startup; legacy databases
 without a migration journal are explicitly rejected rather than overwritten.
 Back up existing data and baseline it deliberately before migrating it.
