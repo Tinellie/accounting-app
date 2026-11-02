@@ -22,6 +22,7 @@ export type ImportDebug = {
   avatarCropLeft: number;
   inverted: boolean;
   header: { text: string; year: number; month: number; sourcePath: string; boxes: OcrBox[] } | null;
+  dayHeader?: { text: string; year: number; month: number; day: number; sourcePath: string; boxes: OcrBox[] } | null;
   primary: { boxes: OcrBox[]; fields: OcrFields };
   retries: {
     field: 'amount' | 'date';
@@ -35,6 +36,13 @@ export type ImportDebug = {
 };
 
 export type PreviewTransaction = Omit<TransactionListItemData, 'amount' | 'occurredAt' | 'type' | 'accountId'> & {
+  sourceCard?: string | null;
+  currencyMode?: 'account' | 'HKD';
+  isRefund?: boolean;
+  fullyRefunded?: boolean;
+  syntheticRefund?: boolean;
+  refundOfId?: number;
+  manualReview?: { fields: boolean; category: boolean };
   amount: number | null;
   occurredAt: Date | null;
   type: 'expense' | 'income' | null;
@@ -58,6 +66,8 @@ export type ImportTransaction = Omit<PreviewTransaction, 'occurredAt' | 'account
 };
 
 export type ImportResult = {
+  source?: 'wechat' | 'alipay' | 'alipay-hk' | 'cmb' | 'hangseng' | 'hangseng-bank';
+  screenshotDate?: string;
   batchId: string;
   transactions: ImportTransaction[];
   headers: { sequence: number; text: string; year: number | null; month: number | null; boxes: OcrBox[] }[];

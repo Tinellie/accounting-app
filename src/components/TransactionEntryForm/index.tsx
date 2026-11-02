@@ -20,8 +20,11 @@ import type { CategoryOption, TransactionType, AccountOption, EditableTransactio
 type TransactionEntryFormProps = {
   accounts: AccountOption[];
   categories: CategoryOption[];
-  initialTransaction?: EditableTransaction;
+  initialTransaction?: Omit<EditableTransaction, 'amount' | 'occurredAt' | 'accountId'> & {
+    amount: number | null; occurredAt: Date | null; accountId: number | null;
+  };
   onSaved?: () => void;
+  onPreviewSubmit?: (formData: FormData) => { success: boolean; message: string };
 };
 
 const initialActionState = { success: false, message: '' };
@@ -32,6 +35,7 @@ export default function TransactionEntryForm({
   categories,
   initialTransaction,
   onSaved,
+  onPreviewSubmit,
 }: TransactionEntryFormProps) {
   // 区分新增与编辑模式，影响表单默认值和提交后的行为。
   const isEditing = initialTransaction !== undefined;
@@ -45,11 +49,13 @@ export default function TransactionEntryForm({
     categoryId: String(initialTransaction?.categoryId ?? ''),
     sourceAccountId: String(initialTransaction?.accountId ?? ''),
     destinationAccountId: String(initialTransaction?.toAccountId ?? ''),
-    occurredAt: initialTransaction?.occurredAt.toISOString() ?? '',
+    occurredAt: initialTransaction?.occurredAt?.toISOString() ?? '',
   }));
   const { type, categoryId, sourceAccountId, destinationAccountId, occurredAt } = formValues;
   // 根据新增/编辑模式选择对应的保存操作。
-  const action = isEditing ? updateTransactionAction : createTransactionAction;
+  const action = onPreviewSubmit
+    ? async (_previous: typeof initialActionState, formData: FormData) => onPreviewSubmit(formData)
+    : isEditing ? updateTransactionAction : createTransactionAction;
   // 保存结果、提交函数和当前是否正在保存。
   const [state, formAction, isPending] = useActionState(action, initialActionState);
   // 只显示与当前支出、收入或转账类型相符的分类。
@@ -87,7 +93,8 @@ export default function TransactionEntryForm({
         const accountId = Number(formData.get('accountId'));
         const toAccountId = Number(formData.get('toAccountId'));
         const categoryId = Number(formData.get('categoryId'));
-        const hasValidAmount = /^-?\d+(?:\.\d{1,2})?$/.test(amount) && Number(amount) > 0;
+        const hasValidAmount = /^-?\d+(?:\.\d{1,2})?$/.test(amount)
+          && (Number(amount) > 0 || (transactionType === 'expense' && Number(amount) < 0));
         const hasValidDate = typeof occurredAt === 'string' && !Number.isNaN(Date.parse(occurredAt));
         const hasValidAccount = Number.isSafeInteger(accountId) && accountId > 0;
         const hasValidDetails = transactionType === 'transfer'
@@ -174,7 +181,7 @@ export default function TransactionEntryForm({
           {initialTransaction ? <input type="hidden" name="id" value={initialTransaction.id} /> : null}
           <Stack className="txn-entry-fields" spacing={2}>
             {/* 选择支出、收入或转账 */}
-            <TransactionTypeSelector type={type} onTypeChange={changeType} fieldId={`${fieldIdPrefix}-type`} />
+            <TransactionTypeSelector type={type} onTypeChange={changeType} fieldId={`${fieldIdPrefix}-type`} allowTransfer={!onPreviewSubmit} />
 
             {/* 交易的时间、账户、金额和备注等输入项 */}
             <Box
@@ -244,7 +251,7 @@ export default function TransactionEntryForm({
               <Box sx={{ gridColumn: type === 'transfer' ? '1 / -1' : undefined }}>
                 <TransactionAmountFields
                   fieldId={`${fieldIdPrefix}-amount`}
-                  initialValue={initialTransaction ? formatMinorUnits(initialTransaction.amount) : undefined}
+                  initialValue={initialTransaction?.amount !== null && initialTransaction?.amount !== undefined ? formatMinorUnits(initialTransaction.amount) : undefined}
                 />
               </Box>
 

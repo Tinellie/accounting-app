@@ -21,11 +21,6 @@ const moneyInputSchema = str
     }
   });
 
-const positiveMoneyInputSchema = moneyInputSchema.refine(
-  (amount) => amount > 0,
-  { message: "金额必须大于 0" },
-);
-
 const nullableIdSchema = z.preprocess(
   (value) => (value === "" || value === undefined ? null : value),
   positiveIdSchema.nullable(),
@@ -79,7 +74,7 @@ export const createTransactionSchema = z
     type: z.enum(["expense", "income", "transfer"], {
       error: "目前只支持支出、收入和转账",
     }),
-    amount: positiveMoneyInputSchema,
+    amount: moneyInputSchema.refine((amount) => amount !== 0, { message: "金额不能为 0" }),
     occurredAt: z.coerce.date(),
     accountId: positiveIdSchema,
     toAccountId: nullableIdSchema,
@@ -87,6 +82,13 @@ export const createTransactionSchema = z
     notes: str.max(1000, "备注不能超过 1000 个字符").optional(),
   })
   .superRefine((transaction, context) => {
+    if (transaction.amount < 0 && transaction.type !== "expense") {
+      context.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "只有支出退款可以使用负金额",
+      });
+    }
     if (transaction.type !== "transfer" && transaction.categoryId === null) {
       context.addIssue({
         code: "custom",

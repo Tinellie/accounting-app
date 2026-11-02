@@ -65,6 +65,8 @@ export default function SourceAccountField({
           } else if (reason === 'clear') {
             setInputValue('');
             onAccountChange('');
+          } else if (reason === 'reset') {
+            setInputValue(inputValue);
           }
         }}
         getOptionLabel={(account) => account.name}

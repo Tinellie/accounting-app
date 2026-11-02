@@ -45,6 +45,28 @@ cp .env.example .env
 npm run dev
 ```
 
+## Transaction Extra Data
+
+Each transaction has a `data` JSON object, defaulting to `{}`. Nested JSON values
+are supported; the top-level value must be an object. SQLite stores this as JSON
+text and Drizzle exposes it as an object. Existing form and bulk edits preserve
+the field; screenshot imports start with an empty object. No extra-data editor
+is exposed yet.
+
+Before using this version with an existing database, run:
+
+```bash
+npm run db:backfill-transaction-data
+```
+
+This additive, repeatable migration preserves transactions and account balances,
+adds a non-null column with an empty-object default, and uses `DATABASE_URL` from
+the local environment when configured. Fresh databases created with `db:push`
+already include the column.
+
+Run `npm run test:transaction-data` to verify migration, JSON persistence and
+preview/import compatibility.
+
 ## Dashboard Charts
 
 The category pie chart and its legend share the same order: parent categories
@@ -63,6 +85,171 @@ changing the total. Date options are 7, 30 (default), 90, and 180 days; the
 server fetches the full 180-day range.
 
 Run sorting tests with `npm run test:category-chart`.
+
+## Alipay HK Screenshot Import
+
+**从支付宝(HK)截图导入** shares the screenshot OCR, AI categorization, editable
+preview, and atomic/idempotent saving flow. It reads `M/YYYY` month headings and
+ignores the income/expense summary below each heading. Transaction descriptions
+are at the upper left, signed `+HKD` / `-HKD` amounts at the upper right, and
+`DD/MM hh:mm` timestamps at the lower left. Dates use the nearest preceding
+month/year heading (UTC+08:00); invalid dates/amounts remain visible errors.
+
+Amounts are stored in HKD minor units, with `-` for expenses and `+` for income.
+Choose an **HKD account**; no currency conversion is performed. Mainland Alipay
+refund/status rules are not inferred for this distinct layout. `data` defaults
+to `{}`. Narrow screenshots are enlarged locally before row segmentation/OCR.
+
+Run `npm run test:alipay-hk-import`. With local PaddleOCR running, set
+`RUN_ALIPAY_HK_OCR=1` to also validate `data/.example/alihk.jpg` (when present).
+Tests mock external AI and never write to the real ledger.
+
+## Hang Seng Credit Card PDF Import
+
+On the transactions page, **恒生信用卡导入** accepts a text-based PDF statement
+(up to 20 MB, 30 pages, 300 transactions). PDF.js reads each page locally;
+PaddleOCR is not needed. Scanned/image-only, encrypted, damaged, or unsupported
+statement layouts produce an explicit error instead of guessed transactions.
+
+- Only rows within the large statement box below `TRANS DATE` are parsed.
+  `OPENING BALANCE`, cardholder headings, and finance/rewards/summary footers
+  are excluded.
+- Dates use `DD MMM YYYY`. Transaction dates are saved at midnight UTC+08:00;
+  posting dates remain in `data`. A positive unsigned amount is an expense;
+  a trailing minus (`3,000.00-`) is income, both stored in integer minor units.
+- Address text is appended to the description as `description (address)`.
+- Description-only foreign-currency, exchange-rate, CRI, and purchase-ID lines
+  attach to the previous transaction, including across page boundaries.
+- The editable preview and atomic/idempotent saving are shared with screenshot
+  imports. **Any active account currency is allowed** for both Hang Seng PDF sources:
+  the amount follows the selected account's currency, without conversion.
+  Foreign-currency values and exchange rates are metadata, not conversion inputs.
+- Expand the row's debug object to inspect extracted PDF text and `data`.
+  AI receives transaction descriptions and category options only, never the PDF,
+  dates, amounts, CRI, purchase IDs, or other `data` fields.
+
+Example `data` (decimal strings preserve original precision and trailing zeros):
+
+```json
+{
+  "postingDate": "2026-08-08",
+  "address": "TOKYO",
+  "regionCode": "JP",
+  "foreignCurrencyAmount": { "currency": "JPY", "amount": "12150" },
+  "exchangeRate": "0.050436",
+  "cri": "A07626273",
+  "purchaseId": "P94557498"
+}
+```
+
+Only present attachment fields are added; absent address/region values are empty
+strings. Malformed transaction/attachment data remains a visible row error.
+Run `npm run test:hangseng-import` for parser, sample-PDF (when available),
+preview-currency, and isolated-database saving tests. Tests mock AI and do not
+send statement data externally or write to the real ledger.
+
+## Hang Seng Bank Account PDF Import
+
+On the transactions page, **恒生银行卡导入** uses the same editable PDF preview
+and atomic/idempotent saving as credit-card import (20 MB, 30 pages, 300 rows).
+
+- Only the bounded table under `TRANSACTION HISTORY 進支記錄` is read.
+  `B/F BALANCE`, `C/F BALANCE`, `Transaction Summary`, and `Credit Interest Accrued`
+  are excluded.
+- English and Chinese descriptions are combined as `English (中文)`. Wrapped
+  description lines are merged before interpreting the amount, including across
+  pages. Repeated transactions without a date inherit the preceding date.
+- `D MMM` / `DD MMM` dates use the complete statement date at the top right,
+  including previous-year dates for December transactions on a January statement.
+  Missing/conflicting statement dates are explicit errors, never the current year.
+- Deposit means income; withdrawal means expense. Exactly one unsigned amount
+  with two decimal places is required; balance is never imported as an amount.
+- PDF text provides exact dates and amounts. If Chinese is embedded as images,
+  only the Chinese-description column is rendered and passed to the existing
+  **local PaddleOCR service** (start it as described below). OCR failure is explicit.
+  Expand the debug object to compare the combined original PDF/OCR lines.
+- Account currency follows the selected account without conversion. `data`
+  defaults to `{}`; AI classification and all preview editing controls are shared.
+
+Run `npm run test:hangseng-bank-import`. Local sample PDFs are read from
+`data/.example/bkhk/bkhk0.pdf` through `bkhk2.pdf` when present. To also verify
+real Chinese OCR, start the local service, set `RUN_BANK_OCR=1`, then run the test.
+All tests mock external AI and never write to the real ledger.
+
+## CMB Screenshot Import
+
+On the transactions page, **从招商银行截图导入** reuses the local OCR service,
+four-way concurrency, AI categorization, editable preview, and atomic saving.
+Choose a **截图日期** before uploading; the date picker defaults to today's
+Beijing date. `今天` / `昨天` are resolved against that date, not the server's
+timezone. An unmarked year uses the selected screenshot year.
+
+- Month headings accept `M月` or `M月/YYYY`, including a separate smaller year.
+  Balance summaries and analysis text are ignored.
+- Date subheadings accept `M.D`, `今天`, or `昨天`. A new month clears the
+  previous day; missing or inconsistent headings produce explicit row errors.
+- Whitespace separates headings and two-line transactions. The left icon and
+  right-side balance are excluded from transaction fields. The description,
+  signed amount (currency symbols/commas ignored), and `[卡号] hh:mm` are parsed.
+- After recognition, each distinct card gets its own account selector at the top.
+  Mapping a card assigns all its remaining rows to that app account. Different
+  cards can map to different CNY accounts or to the same account. The original
+  card label stays visible beside each row's selected account.
+- Selectors follow the remaining card groups when rows are deleted. Unrecognized
+  cards use an explicit `未识别卡号` group and require manual confirmation.
+  Per-row editing remains available, and final saving includes all remaining rows.
+
+Run `npm run test:cmb-import` for fast parsing/saving tests. To validate the
+local sample `data/bkcn.jpg` with local OCR and mocked AI (no ledger writes):
+
+```powershell
+$env:RUN_CMB_OCR_SAMPLES = "1"
+node --experimental-transform-types --test scripts/cmb-import.test.mjs
+```
+
+## Alipay Screenshot Import
+
+On the transactions page, **从支付宝截图导入** uses the same local PaddleOCR
+service, four-way processing, live progress, AI classification, account selection,
+preview, cancellation, and atomic saving as WeChat import. The two upload
+endpoints share their upload validation and same-origin checks.
+
+- A month header such as `10月` uses the current year in China time, captured
+  once at import start; `2025-12` supplies its own year. Transactions use the
+  nearest preceding header and validate their `MM-DD HH:mm` date.
+- Avatars are cropped out. Only the top description/amount and bottom-left date
+  become transaction fields. Middle-left `退款` sets `isRefund: true`; other
+  middle-left text is ignored. Middle-right `已全额退款` marks `fullyRefunded`.
+- Rows with `交易关闭` in the right-side status area are excluded before
+  amount/date retries, refund matching, AI classification, preview, and saving.
+- Within the current screenshot only, full-refund purchases and equal-amount
+  refund rows match one-to-one by nearest absolute transaction time. Ties retain
+  source order. Each refund is used at most once. Missing refunds are inserted
+  immediately after their source row, timestamped one minute after the purchase.
+  They carry `syntheticRefund: true` and `refundOfId`; linked refunds inherit the
+  purchase's expense category and AI feedback. Independent refunds are classified
+  as expenses by AI. Invalid amount/date rows are not used to guess refunds.
+- Normal expenses store a positive amount and display negative; income stores
+  and displays positive. Refunds store a **negative expense amount**, offset
+  spending and increase the account balance, without becoming income.
+  The preview/debug JSON includes `isRefund`; persisted rows derive the same
+  boolean from `type === 'expense' && amount < 0`, requiring no database migration.
+  Editing supports negative expenses; income/transfers must stay positive.
+  Bulk income/expense reversal explicitly rejects refund rows.
+- Chart category totals subtract refunds. The legend retains zero/negative net
+  categories, but pie slices include only positive net amounts and calculate
+  their percentages from that positive subtotal.
+- As with WeChat, debug images and trusted batch JSON are stored under
+  `data/import-vx-debug/<batch UUID>/`; `source: "alipay"` distinguishes batches.
+  No transactions are saved until confirmed. Rows labelled `交易关闭` are not
+  filtered; their amount signs follow the same expense/income rule.
+
+Tests: `npm run test:alipay-import`. To also validate `data/ali-0.jpg` and
+`data/ali-1.jpg` through a running local OCR service, set
+`RUN_ALIPAY_OCR_SAMPLES=1` and run
+`node --experimental-transform-types --test scripts/alipay-import.test.mjs`.
+Those sample tests mock DeepSeek, do not send financial data externally, do not
+write the ledger, and remove only their own generated batch directories.
 
 ## Database Commands
 
@@ -131,23 +318,30 @@ an account assigns its ID, name, and currency to every preview row. Switching or
 clearing the selection updates all rows together; amounts are unchanged (no
 currency conversion is performed). Recognition alone does not save transactions
 or alter account balances. Select a CNY account, click **保存 N 笔交易**, and
-confirm to persist the batch and update the account balance.
+confirm to persist the batch and update the account balances. The top account
+selector explicitly replaces accounts for all preview rows; individual rows can
+instead use different CNY accounts through the selection toolbar or editor.
 Before saving, **取消** discards the in-memory preview and selected account,
 clears progress/errors, and closes the dialog to return to the transactions
 page. Reopening the dialog starts at image selection. It does not write
 transactions or remove server-side OCR debug files.
-After saving, the action remains **关闭** and does not undo persisted transactions.
+After a confirmed successful save, the dialog automatically closes and clears
+the preview. Failed saves keep the preview open with an error so the batch can
+be retried safely.
 
 ### Saving an import
 
-- Any red OCR or AI classification error blocks the entire batch. Missing/invalid
+- Any unresolved red OCR or AI classification error blocks the entire batch. Missing/invalid
   amounts, dates, income/expense directions, or categories also block saving.
   Yellow low-confidence suggestions may be saved after explicit confirmation.
-- Saving accepts only the batch UUID and selected account ID. The server reads
-  the stored `result.json`, revalidates all rows, and checks the account and
-  categories against the current database. Client-supplied OCR values are not
-  trusted. Keep the batch directory until the save completes.
-- All transaction inserts, the net account balance change, and the batch receipt
+- Saving accepts the batch UUID and explicit edited row values, account IDs and
+  manual-confirmation flags. The server reads the original `result.json`,
+  verifies retained IDs belong to that batch and are unique, validates every
+  field, and checks current categories/accounts. Omitted IDs are deleted from
+  the preview only; new IDs and empty batches are rejected. Client-supplied
+  debug/error objects are never trusted. Keep the batch directory until saving.
+  The legacy batch UUID + single account ID request remains supported.
+- All transaction inserts, every affected account's net balance change, and the batch receipt
   are committed in one SQLite transaction. A failure rolls everything back.
 - The additive `wechat_import_batches` table is created automatically on the
   first successful save for existing installations and is also declared in the
@@ -160,6 +354,28 @@ After saving, the action remains **关闭** and does not undo persisted transact
   transactions if saved. The transaction list, account balances, and dashboard
   are refreshed after saving. AI confidence/debug data stays in the batch files;
   transaction rows store the description, category, amount, time, and account.
+
+### Editing an import preview
+
+Both import types reuse the normal list's selection and editing toolbar. It is
+sticky inside the import dialog rather than fixed over the main page. Checkboxes
+support multiple selection and select-all; Alt+clicking a checkbox or row selects
+only that row, even when it was already selected. Normal lists support the same
+Alt shortcut.
+
+The toolbar supports batch category/account assignment, income/expense reversal,
+single-row editing using the existing entry form, and deletion with confirmation.
+All preview operations are local: no database edits or balance updates occur
+until **保存 N 笔交易** is confirmed. Saving includes every remaining preview row,
+not just the checked rows. Refund rows cannot use income/expense reversal.
+
+Manually choosing a category confirms that category and dismisses its AI
+error/warning, but does not dismiss OCR errors. Confirming a valid single-row edit
+also resolves its original OCR errors. Original OCR errors and AI responses stay
+unchanged in the row/debug JSON; separate manual-review flags record confirmation.
+Canceling the import discards these edits. Saving locks further preview changes.
+
+Run `npm run test:preview-edit` for selection/review and edited-save tests.
 
 ### DeepSeek automatic categories
 
@@ -256,13 +472,13 @@ cached in the `wechat_ocr_models` volume.
   validated DeepSeek category recommendations as described above.
 - Missing/invalid amounts, signs, dates, or year headers remain `null`, with
   explicit red errors. No zero-amount/current-date substitutes are generated.
-- The shared transactions list runs in read-only preview mode. Its optional
+- The shared transactions list supports local selection/editing in preview mode. Its optional
   `showDebugData` prop controls original slice images and expandable raw OCR
   objects (defaults to `true` for compatibility). The import dialog explicitly
   passes `false` to hide both; validation errors remain visible. Debug data is
   still generated and retained on disk. Recognition itself does not save records
-  or change balances; use the dialog's explicit save action. Database edit/delete
-  actions remain unavailable in the preview.
+  or change balances; use the dialog's explicit save action. The preview toolbar
+  updates its local rows, never the normal list's database edit/delete actions.
 - During processing, the dialog receives live step updates from the server:
   service readiness, slicing, preprocessing, first-pass OCR, transaction parsing,
   grayscale retries, DeepSeek category recognition, and preview preparation. Row counters reflect completed work,

@@ -402,6 +402,9 @@ export async function reverseTransactionCategoryTypeAction(input: unknown): Prom
         throw new TransactionActionError("部分交易已不存在，请刷新后重试");
       }
       const currentType = selected[0]?.type;
+      if (selected.some((transaction) => transaction.amount < 0)) {
+        throw new TransactionActionError("退款记录不能反转收支类型，请通过编辑修改");
+      }
       if (
         (currentType !== "expense" && currentType !== "income") ||
         selected.some((transaction) => transaction.type !== currentType)

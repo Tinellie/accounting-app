@@ -56,6 +56,7 @@ export default function TransactionsPage() {
       amount: transactions.amount,
       occurredAt: transactions.occurredAt,
       notes: transactions.notes,
+      data: transactions.data,
       accountId: transactions.accountId,
       toAccountId: transactions.toAccountId,
       accountName: accounts.name,
@@ -79,9 +80,18 @@ export default function TransactionsPage() {
   return (
     <Stack component="section" spacing={3.5}>
       <PageHeading eyebrow="ACTIVITY" title="交易明细" description="记录收支与账户转账，查看完整流水" />
-      <WechatImportDialog accounts={accountOptions} />
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} />
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} source="alipay" />
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} source="alipay-hk" />
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} source="cmb" />
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} source="hangseng" />
+        <WechatImportDialog accounts={accountOptions} categories={categoryOptions} source="hangseng-bank" />
+      </Stack>
       <TransactionEntryForm accounts={accountOptions} categories={categoryOptions} />
-      <TransactionsList transactions={transactionRows} accounts={accountOptions} categories={categoryOptions} />
+      <TransactionsList transactions={transactionRows.map((row) => ({
+        ...row, isRefund: row.type === 'expense' && row.amount < 0,
+      }))} accounts={accountOptions} categories={categoryOptions} />
     </Stack>
   );
 }

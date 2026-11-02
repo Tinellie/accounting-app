@@ -9,6 +9,7 @@ type TransactionTypeSelectorProps = {
   type: TransactionType;
   onTypeChange: (type: TransactionType) => void;
   fieldId?: string;
+  allowTransfer?: boolean;
 };
 
 const transactionTypes: { value: TransactionType; label: string }[] = [
@@ -18,7 +19,7 @@ const transactionTypes: { value: TransactionType; label: string }[] = [
 ];
 
 // 提供交易类型切换，并将当前类型放入表单数据。
-export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 'txn-type' }: TransactionTypeSelectorProps) {
+export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 'txn-type', allowTransfer = true }: TransactionTypeSelectorProps) {
   return (
     <Box className="txn-type-field">
       <ToggleButtonGroup
@@ -36,7 +37,7 @@ export default function TransactionTypeSelector({ type, onTypeChange, fieldId = 
           },
         })}
       >
-        {transactionTypes.map((transactionType) => (
+        {transactionTypes.filter((item) => allowTransfer || item.value !== 'transfer').map((transactionType) => (
           <ToggleButton
             className="txn-type-option"
             key={transactionType.value}

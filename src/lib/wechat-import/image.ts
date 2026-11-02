@@ -54,6 +54,7 @@ export async function prepareSlice(input: Buffer, width: number, height: number)
   for (let y = 0; y < info.height; y += Math.max(1, Math.floor(info.height / 20))) {
     background.push(data[y * info.width + Math.floor(width * 0.98)]);
   }
+
   background.sort((a, b) => a - b);
   const inverted = background[Math.floor(background.length / 2)] < 128;
   const gray = await sharp(input).greyscale().negate(inverted ? { alpha: false } : false).normalize().png().toBuffer();
@@ -80,4 +81,33 @@ export async function prepareSlice(input: Buffer, width: number, height: number)
     ? Math.min(Math.floor(width * 0.21), active[active.length - 1] + Math.max(2, Math.floor(width * 0.012)))
     : 0;
   return { gray, binary: await sharp(gray).threshold(180).png().toBuffer(), inverted, avatarCropLeft };
+}
+
+export async function splitCmbRows(image: Buffer, width: number, height: number, gapRatio = 0.04): Promise<Slice[]> {
+  const scanWidth = 420;
+  const resized = await sharp(image).removeAlpha().resize({ width: scanWidth }).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = resized;
+  if (data[Math.floor(scanWidth * 0.98)] < 128) {
+    for (let index = 0; index < data.length; index++) data[index] = 255 - data[index];
+  }
+  const gap = Math.round(scanWidth * gapRatio);
+  const bands: { top: number; bottom: number }[] = [];
+  for (let y = 0; y < info.height; y++) {
+    let ink = 0;
+    for (let x = Math.floor(scanWidth * 0.08); x < scanWidth * 0.95; x++) {
+      if (data[y * scanWidth + x] < 195) ink++;
+    }
+    if (ink < 4) continue;
+    const last = bands[bands.length - 1];
+    if (last && y - last.bottom <= gap) last.bottom = y;
+    else bands.push({ top: y, bottom: y });
+  }
+  const visible = bands.filter((band) => band.bottom - band.top >= scanWidth * 0.014);
+  return visible.map((band, index) => {
+    const previous = visible[index - 1];
+    const next = visible[index + 1];
+    const top = Math.max(0, Math.round((band.top - Math.min(scanWidth * 0.018, previous ? (band.top - previous.bottom) / 2 : band.top)) * width / scanWidth));
+    const bottom = Math.min(height, Math.ceil((band.bottom + Math.min(scanWidth * 0.018, next ? (next.top - band.bottom) / 2 : scanWidth * 0.018)) * width / scanWidth));
+    return { top, height: bottom - top };
+  });
 }

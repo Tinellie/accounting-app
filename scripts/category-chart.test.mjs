@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { groupCategoryChartEntries, sortCategoryChartEntries } from '../src/lib/category-chart.ts';
 
+test('refunds subtract from parent net totals rather than count as extra spending', () => {
+  const groups = groupCategoryChartEntries([
+    { groupId: 1, amount: 4500 }, { groupId: 1, amount: -4500 },
+    { groupId: 2, amount: 1000 }, { groupId: 2, amount: -200 },
+    { groupId: 3, amount: -100 },
+  ]);
+  assert.deepEqual(groups.map((group) => group.total), [800, 0, -100]);
+});
+
 test('hierarchical legend has parent totals and sorted children matching slice order', () => {
   const entries = [
     { id: 21, groupId: 2, amount: 900 },

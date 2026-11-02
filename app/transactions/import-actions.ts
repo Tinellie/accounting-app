@@ -5,10 +5,12 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/src/db';
 import { ImportSaveError, saveImportedBatch } from '@/src/lib/wechat-import/save';
 import type { SaveImportResult } from '@/src/lib/wechat-import/save';
+import type { PreviewEdit } from '@/src/lib/wechat-import/preview';
 
 export async function saveWechatImportAction(input: {
   batchId: string;
-  accountId: number;
+  accountId?: number;
+  editedRows?: PreviewEdit[];
 }): Promise<SaveImportResult | { success: false; message: string }> {
   let result: SaveImportResult;
   try {

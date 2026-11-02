@@ -13,20 +13,25 @@ const stages: { stage: ImportStage; label: string }[] = [
   { stage: 'save', label: '生成预览' },
 ];
 
-export default function WechatImportProgress({ progress, pending, failed }: {
+export default function WechatImportProgress({ progress, pending, failed, pdf = false, pdfOcr = false }: {
   progress: Partial<Record<ImportStage, ImportProgress>>;
   pending: boolean;
   failed: boolean;
+  pdf?: boolean;
+  pdfOcr?: boolean;
 }) {
   return (
-    <Stack component="section" aria-label="截图导入进度" spacing={1.5} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+    <Stack component="section" aria-label={pdf ? 'PDF 导入进度' : '截图导入进度'} spacing={1.5} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
       <Typography variant="subtitle2">处理步骤进度</Typography>
       <Typography variant="caption" color="text.secondary" aria-live="polite">
         {failed ? '处理已停止，请查看下方错误信息。' : pending
-          ? Object.keys(progress).length ? '实时接收服务端进度；预处理与 OCR 可同时进行，可随时取消。' : '正在上传图片，等待服务端开始处理。'
+          ? pdf ? '正在逐页读取 PDF 并整理交易，可随时取消。'
+            : Object.keys(progress).length ? '实时接收服务端进度；预处理与 OCR 可同时进行，可随时取消。' : '正在上传图片，等待服务端开始处理。'
           : '处理完成，请对照原图检查识别结果。'}
       </Typography>
-      {stages.map(({ stage, label }) => {
+      {stages.filter(({ stage }) => !pdf || ['split', 'parse', 'ai-category', 'save', ...(pdfOcr ? ['ocr'] : [])].includes(stage)).map(({ stage, label: originalLabel }) => {
+        const label = pdf && stage === 'split' ? 'PDF 分页与文字提取'
+          : pdfOcr && stage === 'ocr' ? '中文描述本地 OCR' : originalLabel;
         const current = progress[stage];
         const complete = current?.status === 'complete';
         const active = current?.status === 'running';

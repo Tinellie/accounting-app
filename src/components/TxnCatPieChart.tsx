@@ -99,7 +99,7 @@ export default function TxnCatPieChart({ transactions, asOf }: TransactionCatego
       isSubcategory: transaction.parentCategoryId !== null,
       label,
       color,
-      amount: (current?.amount ?? 0) + Math.abs(transaction.amount),
+      amount: (current?.amount ?? 0) + transaction.amount,
     });
   });
 
@@ -108,14 +108,14 @@ export default function TxnCatPieChart({ transactions, asOf }: TransactionCatego
     [...totalsByCategory.entries()].map(([id, category]) => ({ id, ...category })),
   );
   const categories = categoryGroups.flatMap((group) => group.entries);
-  const chartCategories = showSubcategories ? categories : categoryGroups.map((group) => ({
+  const netChartCategories = showSubcategories ? categories : categoryGroups.map((group) => ({
     id: String(group.entries[0].groupId ?? 'uncategorized'),
     label: group.entries[0].groupLabel,
     color: group.entries[0].groupColor,
     amount: group.total,
   }));
-  // 当前图表中全部分类的金额总和，用来计算占比。
-  const totalAmount = categories.reduce((total, category) => total + category.amount, 0);
+  const chartCategories = netChartCategories.filter((category) => category.amount > 0);
+  const totalAmount = chartCategories.reduce((total, category) => total + category.amount, 0);
   // 将整数分转换为账本使用的金额格式并标注币种。
   const formatAmount = (amount: number) => `${formatMinorUnits(amount)} ${selection.currency}`;
 
@@ -200,7 +200,7 @@ export default function TxnCatPieChart({ transactions, asOf }: TransactionCatego
             gap: 2,
           }}
         >
-          <PieChart
+          {chartCategories.length ? <PieChart
             height={260}
             hideLegend
             series={[{
@@ -225,7 +225,7 @@ export default function TxnCatPieChart({ transactions, asOf }: TransactionCatego
               width: '100%',
               [`& .${pieClasses.arcLabel}`]: { fill: '#FFFFFF' },
             }}
-          />
+          /> : <Typography color="text.secondary" sx={{ textAlign: 'center', py: 5 }}>暂无正净额可绘制</Typography>}
           <Stack component="ul" aria-label="分类图例" spacing={1.5} sx={{ m: 0, p: 0, listStyle: 'none', maxHeight: 260, overflowY: 'auto' }}>
             {categoryGroups.map((group) => {
               const first = group.entries[0];
@@ -265,6 +265,11 @@ export default function TxnCatPieChart({ transactions, asOf }: TransactionCatego
           </Stack>
         </Box>
       )}
+      {categories.some((category) => category.amount <= 0) ? (
+        <Typography variant="caption" color="text.secondary">
+          分类金额已扣除退款；非正净额保留在图例中，不绘制扇区，占比按当前可绘制的正净额计算。
+        </Typography>
+      ) : null}
     </Stack>
   );
 }

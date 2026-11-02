@@ -9,6 +9,7 @@ import { fallbackCategoryColor } from '@/src/lib/category-colors';
 import type { transactions } from '@/src/db/schema';
 import { formatMinorUnits } from '@/src/lib/money';
 import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
+import { activeOcrErrors } from '@/src/lib/wechat-import/preview';
 
 /**
  * 组件：交易列表项
@@ -17,8 +18,9 @@ import type { PreviewTransaction } from '@/src/lib/wechat-import/types';
  */
 export type TransactionListItemData = Pick<
   typeof transactions.$inferSelect,
-  'id' | 'type' | 'amount' | 'occurredAt' | 'notes' | 'accountId' | 'toAccountId'
+  'id' | 'type' | 'amount' | 'occurredAt' | 'notes' | 'data' | 'accountId' | 'toAccountId'
 > & {
+  isRefund?: boolean;
   accountName: string;
   currency: string;
   categoryId: number | null;
@@ -33,15 +35,15 @@ export type TransactionListItemData = Pick<
 type TransactionListItemProps = {
   transaction: TransactionListItemData | PreviewTransaction;
   selected?: boolean;
-  onSelectedChange?: (selected: boolean) => void;
+  onSelectedChange?: (selected: boolean, exclusive?: boolean) => void;
   showDebugData?: boolean;
 };
 
 const transactionDisplay = {
-  expense: { label: '支出', color: 'error.main' },
-  income: { label: '收入', color: 'success.main' },
-  transfer: { label: '转账', color: 'info.main' },
-  adjustment: { label: '调整', color: 'text.primary' },
+  expense: { label: '支出' },
+  income: { label: '收入' },
+  transfer: { label: '转账' },
+  adjustment: { label: '调整' },
 } as const;
 
 export default function TransactionListItem({ transaction, selected, onSelectedChange, showDebugData = true }: TransactionListItemProps) {
@@ -50,8 +52,10 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
   const detailsId = useId();
   const debug = 'importDebug' in transaction ? transaction.importDebug : null;
   const aiCategory = 'aiCategory' in transaction ? transaction.aiCategory : undefined;
-  // 当前交易类型对应的显示名称和颜色。
-  const display = transaction.type ? transactionDisplay[transaction.type] : { label: '待识别', color: 'error.main' };
+  const manuallyClassified = 'manualReview' in transaction && transaction.manualReview?.category;
+  const ocrErrors = 'importDebug' in transaction ? activeOcrErrors(transaction) : [];
+  const isRefund = transaction.type === 'expense' && (transaction.amount ?? 0) < 0;
+  const display = transaction.type ? transactionDisplay[transaction.type] : { label: '待识别' };
   // 标记转账记录，以调整列表中账户信息的展示。
   const isTransfer = transaction.type === 'transfer';
   // 支出金额加负号展示，其他类型保留原方向。
@@ -68,8 +72,16 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
     : amountForDisplay !== null && amountForDisplay < 0 ? '−' : amountForDisplay !== null && amountForDisplay > 0 ? '+' : '';
 
   return (
-    <Box sx={debug?.errors.length || aiCategory?.status === 'error' ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
-      {debug && showDebugData ? (
+    <Box
+      onClick={(event) => {
+        if (event.altKey && onSelectedChange && event.target instanceof Element
+          && !event.target.closest('button, input, a, [role="button"]')) {
+          event.preventDefault();
+          onSelectedChange(true, true);
+        }
+      }}
+      sx={ocrErrors.length || (!manuallyClassified && aiCategory?.status === 'error') ? { border: 1, borderColor: 'error.main', bgcolor: 'action.hover', px: 1.5 } : undefined}>
+      {debug?.imageUrl && showDebugData ? (
         <>
           {imageFailed ? <Alert severity="error">原始切图加载失败，文件可能已被清理：{debug.sourcePath}</Alert> : (
             <Image
@@ -84,8 +96,9 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           )}
         </>
       ) : null}
-      {debug?.errors.length ? <Alert severity="error" sx={{ mt: 1 }}>{debug.errors.join('；')}</Alert> : null}
-      {aiCategory && aiCategory.status !== 'success' ? (
+      {ocrErrors.length ? <Alert severity="error" sx={{ mt: 1 }}>{ocrErrors.join('；')}</Alert> : null}
+      {manuallyClassified ? <Typography variant="caption" color="text.secondary">分类已手动确认，原始 OCR / AI 数据保留供调试</Typography> : null}
+      {aiCategory && !manuallyClassified && aiCategory.status !== 'success' ? (
           <Alert severity={aiCategory.status === 'error' ? 'error' : 'warning'} sx={{ mt: 1, '& .MuiAlert-message': { minWidth: 0, width: '100%' } }}>
             <AlertTitle>{aiCategory.status === 'error' ? 'AI 分类返回错误，已保留原分类' : 'AI 分类置信度低于 50%，已应用推荐分类'}</AlertTitle>
             {aiCategory.errors.length ? <Typography variant="body2">{aiCategory.errors.join('；')}</Typography> : null}
@@ -113,7 +126,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
         size="small"
         checked={selected ?? false}
         disabled={!onSelectedChange}
-        onChange={(event) => onSelectedChange?.(event.target.checked)}
+        onChange={(event) => onSelectedChange?.(event.target.checked, event.nativeEvent instanceof MouseEvent && event.nativeEvent.altKey)}
         slotProps={{ input: { 'aria-label': `选择${display.label}记录` } }}
         sx={{
           gridColumn: 1,
@@ -123,7 +136,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           width: 24,
           height: 24,
           p: 0,
-          visibility: debug ? 'hidden' : 'visible',
+          visibility: debug && !onSelectedChange ? 'hidden' : 'visible',
         }}
       />
       {transaction.categoryName || isTransfer ? (
@@ -152,6 +165,8 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
       <Box sx={{ minWidth: 0, gridColumn: 3 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {display.label}
+          {isRefund ? '（退款）' : ''}
+          {'syntheticRefund' in transaction && transaction.syntheticRefund ? '（自动补全）' : ''}
           {transaction.categoryName ? (
             <>
               {' · '}
@@ -200,13 +215,16 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           color="text.secondary"
           sx={{ maxWidth: '100%', textAlign: 'right', overflowWrap: 'anywhere' }}
         >
+          {'sourceCard' in transaction && transaction.sourceCard ? `${transaction.sourceCard} · ` : ''}
           {transaction.accountName}
           {transaction.destinationAccountName ? ` → ${transaction.destinationAccountName}` : ''}
         </Typography>
         <Typography
           variant="body2"
           sx={{
-            color: display.color,
+            color: amountForDisplay === null ? 'text.secondary'
+              : amountForDisplay > 0 ? 'success.main'
+                : amountForDisplay < 0 ? 'error.main' : 'text.primary',
             fontWeight: 700,
             fontVariantNumeric: 'tabular-nums',
             whiteSpace: 'nowrap',
@@ -216,7 +234,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
           {amountForDisplay === null ? '金额待修正' : `${sign}${transaction.currency} ${formatMinorUnits(Math.abs(amountForDisplay))}`}
         </Typography>
       </Box>
-      {aiCategory && (aiCategory.confidence !== null || aiCategory.explanation) ? (
+      {aiCategory && !manuallyClassified && (aiCategory.confidence !== null || aiCategory.explanation) ? (
         <Box sx={{ gridColumn: '3 / -1', gridRow: { xs: 4, md: 2 }, minWidth: 0, justifySelf: 'stretch', textAlign: 'left', overflowWrap: 'anywhere' }}>
           {aiCategory.confidence !== null ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
@@ -234,7 +252,7 @@ export default function TransactionListItem({ transaction, selected, onSelectedC
       {debug && showDebugData ? (
         <>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, pb: 1 }}>
-            <Typography variant="caption" color="text.secondary">原始 OCR / 调试对象</Typography>
+            <Typography variant="caption" color="text.secondary">{'currencyMode' in transaction && transaction.currencyMode === 'account' ? '原始 PDF 文本 / data 调试对象' : '原始 OCR / 调试对象'}</Typography>
             <IconButton
               size="small"
               aria-label={expanded ? '折叠原始 OCR 对象' : '展开原始 OCR 对象'}

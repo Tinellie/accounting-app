@@ -17,6 +17,7 @@ export default function TransactionAmountFields({ fieldId = 'txn-amount', initia
       name="amount"
       label="金额"
       placeholder="0.00"
+      helperText="支出退款填写负金额，普通支出、收入及转账填写正金额"
       defaultValue={initialValue}
       required
       fullWidth

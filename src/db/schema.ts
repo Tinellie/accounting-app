@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, primaryKey, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import type { TransactionData } from '../lib/transaction-data';
 
 export const accounts = sqliteTable(
   'accounts',
@@ -44,6 +45,7 @@ export const transactions = sqliteTable(
     toAccountId: integer('to_account_id').references(() => accounts.id, { onDelete: 'set null' }),
     categoryId: integer('category_id').references(() => categories.id, { onDelete: 'set null' }),
     notes: text('notes'),
+    data: text('data', { mode: 'json' }).$type<TransactionData>().notNull().default({}),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
   },
 );
