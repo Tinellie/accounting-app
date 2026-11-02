@@ -377,6 +377,9 @@ The app's gateway alias is `accounting-web:3000`; only localhost port 3100
 is mapped for diagnostics/SSH tunnels. Persisted SQLite, uploads and debug
 files live in `accounting_accounting_data`. Preset icons are mounted read-only.
 No local ledgers, example statements or environment secrets enter the image.
+`sh scripts/backup.sh` creates a consistent SQLite online backup in the data
+volume's `backups` directory without stopping the app. Copy backups off-host
+regularly; local Docker volumes alone are not disaster recovery.
 
 The image initializes an empty schema using committed Drizzle migrations,
 then starts the standalone server as the unprivileged `node` user.
