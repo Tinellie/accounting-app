@@ -1,0 +1,61 @@
+name: Manage Accounting OCR
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Start resource-limited OCR or stop it
+        type: choice
+        options: [start, stop]
+        required: true
+        default: start
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: accounting-production
+  cancel-in-progress: false
+
+jobs:
+  manage-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Manage OCR over SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        env:
+          OPERATION: ${{ inputs.operation }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        with:
+          host: 139.180.203.201
+          username: deploy
+          port: 22
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          fingerprint: ${{ secrets.VULTR_HOST_FINGERPRINT }}
+          envs: OPERATION,GHCR_TOKEN,GHCR_USER
+          command_timeout: 25m
+          script: |
+            set -eu
+            cd /home/deploy/accounting-app
+            set -a
+            . ./.env.images
+            set +a
+            if [ "$OPERATION" = stop ]; then
+              docker compose -f compose.production.yaml stop wechat-ocr
+              exit 0
+            fi
+            test "$OPERATION" = start
+            export DOCKER_CONFIG="$(mktemp -d)"
+            trap 'rm -f "$DOCKER_CONFIG/config.json"; rmdir "$DOCKER_CONFIG"' EXIT
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker compose -f compose.production.yaml --profile wechat-import pull wechat-ocr
+            if ! docker compose -f compose.production.yaml --profile wechat-import up -d --no-build --wait --wait-timeout 1200 wechat-ocr; then
+              docker compose -f compose.production.yaml logs --tail=80 wechat-ocr
+              docker compose -f compose.production.yaml stop wechat-ocr
+              echo "OCR could not start within its resource limits; it has been stopped." >&2
+              exit 1
+            fi
+            docker compose -f compose.production.yaml ps

@@ -410,6 +410,8 @@ quality but run more slowly; model startup/inference must be tested on small
 servers. If it cannot stay healthy under this limit, stop it instead of raising
 limits on a shared 2 GB host. No OCR port is published. Downloaded models persist
 separately. Start/stop it explicitly after pulling its image with registry access:
+The manual **Manage Accounting OCR** Actions workflow provides authenticated
+start/stop commands and stops OCR automatically if startup fails its health check.
 
 ```bash
 docker compose -f compose.production.yaml --profile wechat-import up -d --no-build wechat-ocr
