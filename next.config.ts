@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "/*": ["./data/**", "./.env*"],
   },
+  outputFileTracingIncludes: {
+    "/api/hangseng*-import": [
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/@napi-rs/canvas*/**/*",
+    ],
+  },
   serverExternalPackages: ["better-sqlite3", "pdfjs-dist"],
   experimental: {
     serverActions: {

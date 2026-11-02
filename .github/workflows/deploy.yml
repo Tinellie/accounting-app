@@ -23,6 +23,8 @@ jobs:
         run: |
           set -eu
           docker build -t ghcr.io/tinellie/accounting-app:${{ github.sha }} .
+          docker run --rm --entrypoint node ghcr.io/tinellie/accounting-app:${{ github.sha }} \
+            -e "import('pdfjs-dist/legacy/build/pdf.mjs').then(m=>{if(typeof m.getDocument!=='function')process.exit(1)})"
           docker build -t ghcr.io/tinellie/accounting-ocr:${{ github.sha }} scripts/wechat-ocr
       - name: Publish images
         env:
