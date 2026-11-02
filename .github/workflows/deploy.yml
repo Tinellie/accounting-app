@@ -1,0 +1,75 @@
+name: Deploy Accounting
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: accounting-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Build tested Linux images
+        run: |
+          set -eu
+          docker build -t ghcr.io/tinellie/accounting-app:${{ github.sha }} .
+          docker build -t ghcr.io/tinellie/accounting-ocr:${{ github.sha }} scripts/wechat-ocr
+      - name: Publish images
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push ghcr.io/tinellie/accounting-app:${{ github.sha }}
+          docker push ghcr.io/tinellie/accounting-ocr:${{ github.sha }}
+
+  deploy:
+    needs: build
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        env:
+          DEPLOY_COMMIT: ${{ github.sha }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        with:
+          host: 139.180.203.201
+          username: deploy
+          port: 22
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          passphrase: ${{ secrets.VULTR_SSH_PASSPHRASE }}
+          fingerprint: ${{ secrets.VULTR_HOST_FINGERPRINT }}
+          envs: DEPLOY_COMMIT,GHCR_TOKEN,GHCR_USER
+          command_timeout: 15m
+          script: |
+            set -eu
+            cd /home/deploy/accounting-app
+            git diff --quiet
+            git diff --cached --quiet
+            git fetch origin "$DEPLOY_COMMIT"
+            git merge --ff-only "$DEPLOY_COMMIT"
+            test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT"
+            export ACCOUNTING_IMAGE="ghcr.io/tinellie/accounting-app:$DEPLOY_COMMIT"
+            export OCR_IMAGE="ghcr.io/tinellie/accounting-ocr:$DEPLOY_COMMIT"
+            export DOCKER_CONFIG="$(mktemp -d)"
+            trap 'rm -f "$DOCKER_CONFIG/config.json"; rmdir "$DOCKER_CONFIG"' EXIT
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker compose -f compose.production.yaml config --quiet
+            docker compose -f compose.production.yaml pull app
+            docker compose -f compose.production.yaml up -d --no-build --wait --wait-timeout 180 app
+            printf 'ACCOUNTING_IMAGE=%s\nOCR_IMAGE=%s\n' "$ACCOUNTING_IMAGE" "$OCR_IMAGE" > .env.images.tmp
+            mv .env.images.tmp .env.images
+            docker compose -f compose.production.yaml ps

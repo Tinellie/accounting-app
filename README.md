@@ -369,6 +369,60 @@ npm run db:studio
 
 ## Docker Compose (with Caddy)
 
+### Vultr shared gateway deployment
+
+Use `compose.production.yaml` behind the existing `gateway` Docker network,
+not the development Compose Caddy (which would conflict on port 80).
+The app's gateway alias is `accounting-web:3000`; only localhost port 3100
+is mapped for diagnostics/SSH tunnels. Persisted SQLite, uploads and debug
+files live in `accounting_accounting_data`. Preset icons are mounted read-only.
+No local ledgers, example statements or environment secrets enter the image.
+
+The image initializes an empty schema using committed Drizzle migrations,
+then starts the standalone server as the unprivileged `node` user.
+Already-managed databases apply pending migrations on startup; legacy databases
+without a migration journal are explicitly rejected rather than overwritten.
+Back up existing data and baseline it deliberately before migrating it.
+Do not use `docker compose down -v`.
+
+The GitHub workflow builds Linux app/OCR images on GitHub runners (not the
+small production server) and publishes commit-specific GHCR tags. Set Actions
+secrets `VULTR_SSH_KEY`, optional `VULTR_SSH_PASSPHRASE`, and the verified
+`VULTR_HOST_FINGERPRINT`; set repository variable `DEPLOY_ENABLED=true` only
+after `/home/deploy/accounting-app` is prepared with this Git origin.
+Deploys fail on tracked local changes/divergence. The short-lived workflow
+registry token is used only in a temporary Docker client configuration.
+Only the app is automatically updated. The last deployed tags are written to
+untracked `.env.images`; source it before manual operations:
+
+```bash
+cd /home/deploy/accounting-app
+set -a
+. ./.env.images
+set +a
+docker compose -f compose.production.yaml ps
+docker compose -f compose.production.yaml logs --tail=100 app
+```
+
+OCR is optional and resource-limited: one worker, half a CPU, 768 MB RAM and
+up to 768 MB additional swap. Its PP-OCRv5 server models retain recognition
+quality but run more slowly; model startup/inference must be tested on small
+servers. If it cannot stay healthy under this limit, stop it instead of raising
+limits on a shared 2 GB host. No OCR port is published. Downloaded models persist
+separately. Start/stop it explicitly after pulling its image with registry access:
+
+```bash
+docker compose -f compose.production.yaml --profile wechat-import up -d --no-build wechat-ocr
+docker compose -f compose.production.yaml stop wechat-ocr
+```
+
+The gateway route for this deployment is `acc.suzutsuki.com` forwarding to
+`accounting-web:3000`. This app does not implement login: public deployment
+without gateway authentication allows anyone to read and modify the ledger.
+Use authentication or private access for financial data.
+
+### Standalone local Compose
+
 ```bash
 docker compose up --build
 ```

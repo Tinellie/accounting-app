@@ -1,0 +1,76 @@
+name: accounting
+
+services:
+  app:
+    image: ${ACCOUNTING_IMAGE:-accounting-app:local}
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: /app/data/accounting.db
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size=256
+      WECHAT_OCR_URL: http://wechat-ocr:8765
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+    volumes:
+      - accounting_data:/app/data
+      - ./data/icons-preset:/app/data/icons-preset:ro
+    ports:
+      - "127.0.0.1:3100:3000"
+    networks:
+      default: {}
+      gateway:
+        aliases:
+          - accounting-web
+    mem_limit: 384m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/transactions').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  wechat-ocr:
+    profiles: ["wechat-import"]
+    image: ${OCR_IMAGE:-accounting-ocr:local}
+    build:
+      context: ./scripts/wechat-ocr
+    restart: "on-failure:2"
+    environment:
+      WECHAT_OCR_WORKERS: "1"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    volumes:
+      - wechat_ocr_models:/root/.paddlex
+    mem_limit: 768m
+    memswap_limit: 1536m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      start_period: 900s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  gateway:
+    external: true
+    name: gateway
+
+volumes:
+  accounting_data:
+  wechat_ocr_models:

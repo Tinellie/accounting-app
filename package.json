@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "db:migrate": "node scripts/migrate.mjs",
     "db:backfill-tag-hierarchy": "node scripts/backfill-tag-hierarchy.mjs",
     "test:tags": "node --experimental-transform-types --test scripts/tags.test.mjs",
     "test:transaction-filters": "node --experimental-transform-types --test scripts/transaction-filters.test.mjs",

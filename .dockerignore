@@ -6,3 +6,12 @@ npm-debug.log*
 README.md
 .venv-wechat
 data/import-vx-debug
+.env
+.env.*
+data
+!data/icons-preset
+!data/icons-preset/**
+.vscode
+*.code-workspace
+*.tsbuildinfo
+scripts/wechat-ocr/__pycache__
