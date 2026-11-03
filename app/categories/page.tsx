@@ -3,7 +3,7 @@ import Stack from "@mui/material/Stack";
 import CategoryManager from "@/src/components/CategoryManager";
 import TagManager from "@/src/components/TagManager";
 import PageHeading from "@/src/components/PageHeading";
-import { db } from "@/src/db";
+import { getUserDb } from "@/src/db/user";
 import { categories, tags } from "@/src/db/schema";
 import categoryIconNames from "@/src/lib/category-icon-names.json";
 
@@ -11,7 +11,8 @@ import categoryIconNames from "@/src/lib/category-icon-names.json";
  * 组件：分类管理页面
  * 功能：展示分类与标签管理工具，供用户维护分类层级和外观。
  */
-export default function CategoriesPage() {
+export default async function CategoriesPage() {
+  const db = await getUserDb();
   // 读取分类管理页需要展示的分类资料，并按用户设定顺序排列。
   const categoryRows = db
     .select({

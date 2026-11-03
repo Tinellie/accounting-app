@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import { revalidatePath } from 'next/cache';
-import { db } from '@/src/db';
+import { getUserDb, getUserDirectory } from '@/src/db/user';
 import { ImportSaveError, saveImportedBatch } from '@/src/lib/wechat-import/save';
 import type { SaveImportResult } from '@/src/lib/wechat-import/save';
 import type { PreviewEdit } from '@/src/lib/wechat-import/preview';
@@ -12,9 +12,11 @@ export async function saveWechatImportAction(input: {
   accountId?: number;
   editedRows?: PreviewEdit[];
 }): Promise<SaveImportResult | { success: false; message: string }> {
+  const db = await getUserDb();
+  const directory = path.join(await getUserDirectory(), 'import-vx-debug');
   let result: SaveImportResult;
   try {
-    result = await saveImportedBatch(db, input, path.join(process.cwd(), 'data', 'import-vx-debug'));
+    result = await saveImportedBatch(db, input, directory);
   } catch (error) {
     console.error('[wechat-import-save]', error);
     return {

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, isNull, min, ne } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/src/db";
+import { getUserDb } from "@/src/db/user";
 import { categories, transactions } from "@/src/db/schema";
 import { chooseCategoryColor } from "@/src/lib/category-colors";
 import { createCategorySchema, positiveIdSchema, updateCategorySchema } from "@/src/lib/validations";
@@ -20,6 +20,7 @@ export async function createCategoryAction(
   _previousState: CategoryActionState,
   formData: FormData,
 ): Promise<CategoryActionState> {
+  const db = await getUserDb();
   const parsed = createCategorySchema.safeParse({
     code: formData.get("code"),
     name: formData.get("name"),
@@ -91,6 +92,7 @@ export async function updateCategoryAction(
   _previousState: CategoryActionState,
   formData: FormData,
 ): Promise<CategoryActionState> {
+  const db = await getUserDb();
   const parsed = updateCategorySchema.safeParse({
     id: formData.get("id"),
     code: formData.get("code"),
@@ -199,6 +201,7 @@ export async function updateCategoryAction(
 
 /** 在同一个分类层级和收支类型内保存新的排序。 */
 export async function reorderCategoriesAction(categoryIds: number[]): Promise<CategoryActionState> {
+  const db = await getUserDb();
   const parsedIds = z.array(positiveIdSchema).min(1).max(500).safeParse(categoryIds);
   if (!parsedIds.success || new Set(parsedIds.data).size !== parsedIds.data.length) {
     return { success: false, message: "分类排序数据无效" };
@@ -262,6 +265,7 @@ export async function deleteCategoryAction(
   _previousState: CategoryActionState,
   formData: FormData,
 ): Promise<CategoryActionState> {
+  const db = await getUserDb();
   const parsedId = positiveIdSchema.safeParse(formData.get("id"));
   if (!parsedId.success) {
     return { success: false, message: "分类编号无效" };

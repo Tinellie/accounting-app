@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { exchangeRateSchema } from '@/src/lib/transaction-filters';
+import { getCurrentSession } from '@/src/lib/auth';
 
 const providerSchema = z.array(z.object({
   date: z.iso.date(), base: z.literal('CNY'), quote: z.string().regex(/^[A-Z]{3}$/), rate: z.number().positive().finite(),
 })).min(1);
 
 export async function GET() {
+  if (!await getCurrentSession()) return Response.json({ error: '请先登录' }, { status: 401 });
   try {
     const response = await fetch('https://api.frankfurter.dev/v2/rates?base=CNY', {
       next: { revalidate: 3600 }, signal: AbortSignal.timeout(15_000),

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/src/db";
+import { getUserDb } from "@/src/db/user";
 import { accounts, categories, transactions } from "@/src/db/schema";
 import { createTransactionSchema, positiveIdSchema, transactionIdsSchema } from "@/src/lib/validations";
 import { TransactionTagError, updateTransactionTags } from "@/src/lib/transaction-tags";
@@ -26,6 +26,7 @@ type TransactionActionState = {
 class TransactionActionError extends Error {}
 
 export async function bulkUpdateTransactionTagsAction(input: unknown): Promise<TransactionActionState> {
+  const db = await getUserDb();
   try {
     const result = updateTransactionTags(db, input);
     revalidatePath("/transactions");
@@ -48,6 +49,7 @@ export async function createTransactionAction(
   _previousState: TransactionActionState,
   formData: FormData,
 ): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsed = createTransactionSchema.safeParse({
     type: formData.get("type"),
     amount: formData.get("amount"),
@@ -150,6 +152,7 @@ export async function updateTransactionAction(
   _previousState: TransactionActionState,
   formData: FormData,
 ): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsed = updateTransactionSchema.safeParse({
     id: formData.get("id"),
     type: formData.get("type"),
@@ -261,6 +264,7 @@ export async function updateTransactionAction(
 }
 
 export async function bulkUpdateTransactionCategoryAction(input: unknown): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsed = bulkCategorySchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message ?? "分类批量更新数据无效" };
@@ -306,6 +310,7 @@ export async function bulkUpdateTransactionCategoryAction(input: unknown): Promi
 }
 
 export async function bulkUpdateTransactionAccountAction(input: unknown): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsed = bulkAccountSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message ?? "账户批量更新数据无效" };
@@ -392,6 +397,7 @@ export async function bulkUpdateTransactionAccountAction(input: unknown): Promis
 }
 
 export async function reverseTransactionCategoryTypeAction(input: unknown): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsedIds = transactionIdsSchema.safeParse(input);
   if (!parsedIds.success) {
     return { success: false, message: parsedIds.error.issues[0]?.message ?? "所选交易无效" };
@@ -474,6 +480,7 @@ export async function reverseTransactionCategoryTypeAction(input: unknown): Prom
 }
 
 export async function deleteTransactionsAction(input: unknown): Promise<TransactionActionState> {
+  const db = await getUserDb();
   const parsedIds = transactionIdsSchema.safeParse(input);
   if (!parsedIds.success) {
     return { success: false, message: parsedIds.error.issues[0]?.message ?? "所选交易无效" };

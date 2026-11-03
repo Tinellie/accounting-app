@@ -5,7 +5,7 @@ import PageHeading from "@/src/components/PageHeading";
 import TransactionEntryForm from "@/src/components/TransactionEntryForm";
 import TransactionsList from "@/src/components/TransactionsList";
 import WechatImportDialog from "@/src/components/WechatImportDialog";
-import { db } from "@/src/db";
+import { getUserDb } from "@/src/db/user";
 import { accounts, categories, tags, transactions, transactionTags } from "@/src/db/schema";
 import { fallbackCategoryColor } from "@/src/lib/category-colors";
 
@@ -16,7 +16,8 @@ import { fallbackCategoryColor } from "@/src/lib/category-colors";
 const destinationAccounts = alias(accounts, "destination_accounts");
 const parentCategories = alias(categories, "parent_categories");
 
-export default function TransactionsPage() {
+export default async function TransactionsPage() {
+  const db = await getUserDb();
 
   // 读取未归档账户，供交易表单选择。
   const accountOptions = db

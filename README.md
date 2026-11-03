@@ -369,6 +369,46 @@ npm run db:studio
 
 ## Docker Compose (with Caddy)
 
+### User accounts and private ledgers
+
+Visit `/register` to create a username/password login, or `/login` to sign in.
+Usernames are case-insensitive, 3–32 ASCII letters/digits/underscores; passwords
+are 10–128 characters and stored using salted scrypt hashes. Registration starts
+with an empty ledger. There is no password recovery/email service; keep your
+password safe.
+
+Each user has an independently migrated SQLite ledger and private uploads/import
+debug files under `data/users/<server-generated-user-id>/`. Accounts, categories,
+transactions, tags, balances and import batches are isolated by database, including
+references and uniqueness checks. Preset icons remain shared. Existing legacy
+`accounting.db`, icons and import files are preserved, but never assigned or
+exposed to newly registered users. Do not copy a legacy ledger into a user directory
+without a deliberate, backed-up migration.
+
+The authentication database is `data/auth.db` (or `AUTH_DATABASE_URL`); it stores
+users, hashed session tokens and persisted authentication rate limits. Sessions
+expire after 30 days and use HttpOnly/SameSite=Lax cookies, Secure in production
+(serve production through HTTPS). `/profile` supports display names, password
+changes, individual device logout and logout of all other devices. Password
+changes rotate the current session and invalidate all previous sessions.
+Logout and device revocation take effect server-side, not just in the browser.
+There is no shared/default administrative user.
+
+All pages, actions, imports and private images require authentication. Pages
+redirect to `/login`; APIs reject unauthenticated requests. Only login, registration,
+framework assets and the data-free `/api/health` check are public. The proxy checks
+sessions, and data entry points independently select the authenticated user's
+database/storage; never accept a client-supplied user ID.
+
+Run `node --experimental-transform-types --test scripts/auth.test.mjs` for
+password/session lifecycle, rate-limit and complete ledger/file isolation tests.
+The HTTP test `scripts/auth-http.test.mjs` additionally checks real page/action
+and private-image access against an isolated production server; set
+`AUTH_TEST_BASE_URL` to a localhost server and `AUTH_TEST_DATA_DIR` to that server's
+temporary data directory (and `NODE_ENV=production` for its Secure cookie name).
+Do not point these tests at a real ledger. CI also starts the production image
+and checks unauthenticated/forged-session access before publishing it.
+
 ### Vultr shared gateway deployment
 
 Use `compose.production.yaml` behind the existing `gateway` Docker network,
@@ -377,8 +417,11 @@ The app's gateway alias is `accounting-web:3000`; only localhost port 3100
 is mapped for diagnostics/SSH tunnels. Persisted SQLite, uploads and debug
 files live in `accounting_accounting_data`. Preset icons are mounted read-only.
 No local ledgers, example statements or environment secrets enter the image.
-`sh scripts/backup.sh` creates a consistent SQLite online backup in the data
-volume's `backups` directory without stopping the app. Copy backups off-host
+`sh scripts/backup.sh` creates consistent SQLite online backups of the legacy
+ledger, authentication database and all user ledgers in a timestamped data
+volume `backups` subdirectory without stopping the app. Each database is
+individually consistent; this is not a single cross-database snapshot. Include
+private uploads when backing up the complete data volume. Copy backups off-host
 regularly; local Docker volumes alone are not disaster recovery.
 
 The image initializes an empty schema using committed Drizzle migrations,
@@ -428,9 +471,9 @@ docker compose -f compose.production.yaml stop wechat-ocr
 ```
 
 The gateway route for this deployment is `acc.suzutsuki.com` forwarding to
-`accounting-web:3000`. This app does not implement login: public deployment
-without gateway authentication allows anyone to read and modify the ledger.
-Use authentication or private access for financial data.
+`accounting-web:3000`. The app requires login and isolates each user's ledger;
+the gateway itself adds no additional authentication. Registration is public.
+Use HTTPS, maintain backups and keep the server/deployment credentials private.
 
 ### Standalone local Compose
 

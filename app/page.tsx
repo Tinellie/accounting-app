@@ -5,7 +5,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { connection } from 'next/server';
 import DashboardChartArea, { DashboardChartSlot } from '@/src/components/DashboardChartArea';
 import TxnCatPieChart from '@/src/components/TxnCatPieChart';
-import { db } from '@/src/db';
+import { getUserDb } from '@/src/db/user';
 import { accounts, categories, transactions } from '@/src/db/schema';
 
 /**
@@ -15,6 +15,7 @@ import { accounts, categories, transactions } from '@/src/db/schema';
 const parentCategories = alias(categories, 'parent_categories');
 
 export default async function Home() {
+  const db = await getUserDb();
   await connection();
   // 统一图表的时间基准，避免服务端和客户端使用不同的当前时间。
   const asOf = new Date();

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { getUserDirectory } from '../db/user';
 
-const uploadIconDirectory = join(process.cwd(), 'data', 'icons');
 const presetIconDirectory = join(process.cwd(), 'data', 'icons-preset');
 const maxIconSize = 5 * 1024 * 1024;
 type IconSource = 'preset' | 'upload';
@@ -10,6 +10,7 @@ type IconSource = 'preset' | 'upload';
 export class AccountIconError extends Error {}
 
 export async function saveAccountIcon(value: FormDataEntryValue | null): Promise<string | null> {
+  const uploadIconDirectory = join(await getUserDirectory(), 'icons');
   if (value === null || typeof value === 'string' || value.size === 0) return null;
   if (value.size > maxIconSize) {
     throw new AccountIconError('图标图片不能超过 5 MB');
@@ -38,7 +39,7 @@ export async function resolveAccountIcon(value: FormDataEntryValue | null): Prom
   }
 
   const parsed = parseAccountIcon(value);
-  const path = parsed ? getAccountIconPath(parsed.source, parsed.filename) : null;
+  const path = parsed ? await getAccountIconPath(parsed.source, parsed.filename) : null;
   if (!parsed || !path) throw new AccountIconError('所选账户图标无效');
 
   try {
@@ -54,11 +55,12 @@ export async function deleteAccountIcon(filename: string): Promise<void> {
   const parsed = parseAccountIcon(filename);
   if (!parsed || parsed.source !== 'upload') return;
 
-  const path = getAccountIconPath(parsed.source, parsed.filename);
+  const path = await getAccountIconPath(parsed.source, parsed.filename);
   if (path) await rm(path, { force: true });
 }
 
-export function getAccountIconPath(source: string, filename: string): string | null {
+export async function getAccountIconPath(source: string, filename: string): Promise<string | null> {
+  const uploadIconDirectory = join(await getUserDirectory(), 'icons');
   if (!isSupportedIconFilename(filename)) return null;
 
   if (source === 'preset') return join(presetIconDirectory, filename);

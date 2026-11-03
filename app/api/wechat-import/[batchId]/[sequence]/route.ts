@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { debugRoot } from '@/src/lib/wechat-import/server';
+import { getUserDirectory } from '@/src/db/user';
 
 export const runtime = 'nodejs';
 
 export async function GET(_request: Request, context: { params: Promise<{ batchId: string; sequence: string }> }) {
+  const debugRoot = path.join(await getUserDirectory(), 'import-vx-debug');
   const { batchId, sequence } = await context.params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(batchId) || !/^[1-9]\d{0,2}$/.test(sequence)) {
     return Response.json({ error: '无效的切图路径' }, { status: 400 });

@@ -7,7 +7,9 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import AppNavigation from "@/src/components/AppNavigation";
+import NavigationFooter from "@/src/components/NavigationFooter";
 import NextLink from "@/src/components/NextLink";
+import { getCurrentSession } from "@/src/lib/auth";
 import theme from "@/src/theme/theme";
 
 /**
@@ -23,13 +25,16 @@ type RootLayoutProps = {
   children: ReactNode;
 };
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default async function RootLayout({ children }: RootLayoutProps) {
+  const currentSession = await getCurrentSession();
+
   return (
     <html lang="zh-CN">
       <body>
         <AppRouterCacheProvider>
           <ThemeProvider theme={theme}>
             <CssBaseline />
+            {currentSession ? (
             <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: { xs: 'column', md: 'row' }, bgcolor: 'background.default' }}>
               <Box
                 component="aside"
@@ -88,20 +93,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                   </Box>
                 </Box>
                 <AppNavigation />
-                <Box
-                  sx={{
-                    display: { xs: 'none', md: 'flex' },
-                    alignItems: 'center',
-                    gap: 1.125,
-                    mt: 'auto',
-                    px: 1.5,
-                    pt: 2.25,
-                    borderTop: '1px solid rgb(255 255 255 / 14%)',
-                  }}
-                >
-                  <Box aria-hidden="true" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#E9B28D' }} />
-                  <Typography variant="caption" sx={{ color: '#B6C7C0' }}>本地账本</Typography>
-                </Box>
+                <NavigationFooter />
               </Box>
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Box
@@ -127,6 +119,22 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 </Box>
               </Box>
             </Box>
+            ) : (
+              <Box
+                component="main"
+                sx={{
+                  minHeight: '100vh',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2.5,
+                  py: 5,
+                  bgcolor: 'background.default',
+                }}
+              >
+                {children}
+              </Box>
+            )}
           </ThemeProvider>
         </AppRouterCacheProvider>
       </body>

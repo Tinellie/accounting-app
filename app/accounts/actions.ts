@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, asc, eq, inArray, min, ne, or } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/src/db";
+import { getUserDb } from "@/src/db/user";
 import { accounts } from "@/src/db/schema";
 import {
   AccountIconError,
@@ -31,6 +31,7 @@ export async function createAccountAction(
   _previousState: AccountActionState,
   formData: FormData,
 ): Promise<AccountActionState> {
+  const db = await getUserDb();
   const parsed = createAccountSchema.safeParse({
     name: formData.get("name"),
     code: formData.get("code"),
@@ -82,6 +83,7 @@ export async function updateAccountAction(
   _previousState: AccountActionState,
   formData: FormData,
 ): Promise<AccountActionState> {
+  const db = await getUserDb();
   const parsed = updateAccountSchema.safeParse({
     id: formData.get("id"),
     code: formData.get("code"),
@@ -163,6 +165,7 @@ export async function reorderAccountsAction(
   isArchived: boolean,
   accountType: string,
 ): Promise<AccountActionState> {
+  const db = await getUserDb();
   const parsedIds = z.array(positiveIdSchema).min(1).max(500).safeParse(accountIds);
   const parsedArchived = z.boolean().safeParse(isArchived);
   const parsedType = z.enum(["checking", "savings", "credit", "cash", "other"]).safeParse(accountType);
@@ -219,6 +222,7 @@ export async function reorderAccountsAction(
 
 /** 归档或恢复账户，保留已有流水和余额。 */
 export async function setAccountArchivedAction(formData: FormData): Promise<void> {
+  const db = await getUserDb();
   const parsedId = positiveIdSchema.safeParse(formData.get("id"));
   const parsedStatus = z.enum(["true", "false"]).safeParse(formData.get("isArchived"));
   if (!parsedId.success || !parsedStatus.success) return;

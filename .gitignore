@@ -28,6 +28,11 @@
 /data/accounting.db
 /data/accounting.db-shm
 /data/accounting.db-wal
+/data/auth.db
+/data/auth.db-shm
+/data/auth.db-wal
+/data/users/
+/data/backups/
 
 # misc
 .DS_Store

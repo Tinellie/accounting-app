@@ -1,4 +1,5 @@
-import { db } from '@/src/db';
+import path from 'node:path';
+import { getUserDb, getUserDirectory } from '@/src/db/user';
 import { categories } from '@/src/db/schema';
 import { ImportError, importScreenshot } from '@/src/lib/wechat-import/server';
 import type { ImportStreamEvent } from '@/src/lib/wechat-import/types';
@@ -8,6 +9,8 @@ import { importHangSengPdf } from '@/src/lib/wechat-import/hangseng-pdf';
 const MAX_UPLOAD = 20 * 1024 * 1024;
 
 export async function handleScreenshotUpload(request: Request, source: 'wechat' | 'alipay' | 'alipay-hk' | 'cmb' | 'hangseng' | 'hangseng-bank') {
+  const db = await getUserDb();
+  const storageRoot = path.join(await getUserDirectory(), 'import-vx-debug');
   const pdf = source === 'hangseng' || source === 'hangseng-bank';
   const fileLabel = pdf ? 'PDF' : '图片';
   const origin = request.headers.get('origin');
@@ -48,8 +51,8 @@ export async function handleScreenshotUpload(request: Request, source: 'wechat' 
     const input = Buffer.from(await file.arrayBuffer());
     const categoryOptions = db.select().from(categories).all();
     const processFile = (signal: AbortSignal, onProgress?: Parameters<typeof importScreenshot>[3]) => pdf
-      ? importHangSengPdf(input, categoryOptions, signal, onProgress, source)
-      : importScreenshot(input, categoryOptions, signal, onProgress, source, screenshotDate);
+      ? importHangSengPdf(input, categoryOptions, signal, onProgress, source, storageRoot)
+      : importScreenshot(input, categoryOptions, signal, onProgress, source, screenshotDate, storageRoot);
     if (request.headers.get('accept')?.includes('application/x-ndjson')) {
       const abort = new AbortController();
       const signal = AbortSignal.any([request.signal, abort.signal]);

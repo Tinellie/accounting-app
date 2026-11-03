@@ -80,6 +80,7 @@ export async function importHangSengPdf(
   input: Buffer, categories: CategoryOption[], signal: AbortSignal,
   onProgress?: (progress: ImportProgress) => void,
   source: 'hangseng' | 'hangseng-bank' = 'hangseng',
+  storageRoot = debugRoot,
 ): Promise<ImportResult> {
   const bank = source === 'hangseng-bank';
   let inHistory = false;
@@ -110,7 +111,7 @@ export async function importHangSengPdf(
   if (!parsed.length) throw new ImportError(`未找到有效账目表格；仅支持含可提取文字及 ${bank ? 'TRANSACTION HISTORY' : 'TRANS DATE'} 表头的恒生账单 PDF，不支持扫描件`, 422);
   if (parsed.length > 300) throw new ImportError('账目超过 300 笔，请拆分 PDF 后重试', 422);
   const batchId = randomUUID();
-  const directory = path.join(debugRoot, batchId);
+  const directory = path.join(storageRoot, batchId);
   await mkdir(directory, { recursive: true });
   for (const page of pages) {
     signal.throwIfAborted();
@@ -134,7 +135,7 @@ export async function importHangSengPdf(
       categoryIcon: category?.icon ?? null, categoryColor: category?.color ?? null,
       categoryParentId: category?.parentId ?? null, categoryParentColor: null,
       importDebug: {
-        sequence: index + 1, sourcePath: `data/import-vx-debug/${batchId}/page-${page.page}.json`,
+        sequence: index + 1, sourcePath: path.relative(process.cwd(), path.join(directory, `page-${page.page}.json`)).split(path.sep).join('/'),
         imageUrl: '', binaryPath: '', bounds: { left: 0, top: 0, width: page.width, height: page.height },
         avatarCropLeft: 0, inverted: false, header: null, retries: [],
         primary: { boxes: row.lines.map((line) => ({ text: `[第 ${line.page} 页] ${line.text}`, confidence: 1, box: [0, line.y, page.width, line.y + 10] })),

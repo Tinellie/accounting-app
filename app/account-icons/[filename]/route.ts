@@ -7,7 +7,7 @@ export async function GET(
 ) {
   const { filename } = await params;
   const source = new URL(request.url).searchParams.get('source') ?? 'upload';
-  const path = getAccountIconPath(source, filename);
+  const path = await getAccountIconPath(source, filename);
   const contentType = getAccountIconContentType(filename);
   if (!path || !contentType) return new Response(null, { status: 404 });
 
@@ -16,7 +16,7 @@ export async function GET(
     return new Response(new Uint8Array(image), {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
       },
     });

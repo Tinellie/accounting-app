@@ -79,6 +79,7 @@ export async function importScreenshot(
   onProgress?: (progress: ImportProgress) => void,
   source: 'wechat' | 'alipay' | 'alipay-hk' | 'cmb' = 'wechat',
   screenshotDate = chinaToday(),
+  storageRoot = debugRoot,
 ): Promise<ImportResult> {
   const alipay = source === 'alipay';
   const alipayHk = source === 'alipay-hk';
@@ -116,9 +117,9 @@ export async function importScreenshot(
   const total = split.slices.length;
   onProgress?.({ stage: 'split', status: 'complete', completed: total, total, message: `已切分为 ${total} 行（包含年月标题）` });
   const batchId = randomUUID();
-  const directory = path.join(debugRoot, batchId);
+  const directory = path.join(storageRoot, batchId);
   await mkdir(directory, { recursive: true });
-  const relativePath = (name: string) => `data/import-vx-debug/${batchId}/${name}`;
+  const relativePath = (name: string) => path.relative(process.cwd(), path.join(directory, name)).split(path.sep).join('/');
   let preprocessed = 0;
   let recognized = 0;
   onProgress?.({ stage: 'preprocess', status: 'running', completed: 0, total, message: `正在去头像、反色及二值化（最多 ${concurrency} 行并发）` });

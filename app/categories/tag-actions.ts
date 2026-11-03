@@ -1,13 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { db } from '@/src/db';
+import { getUserDb } from '@/src/db/user';
 import { deleteTag, saveTag, TagError } from '@/src/lib/tags';
 import { positiveIdSchema } from '@/src/lib/validations';
 
 export type TagActionState = { success: boolean; message: string };
 
 export async function saveTagAction(_previous: TagActionState, form: FormData): Promise<TagActionState> {
+  const db = await getUserDb();
   const rawId = form.get('id');
   const id = rawId === null ? undefined : positiveIdSchema.safeParse(rawId);
   if (id && !id.success) return { success: false, message: '标签编号无效' };
@@ -25,6 +26,7 @@ export async function saveTagAction(_previous: TagActionState, form: FormData): 
 }
 
 export async function deleteTagAction(_previous: TagActionState, form: FormData): Promise<TagActionState> {
+  const db = await getUserDb();
   try {
     deleteTag(db, form.get('id'));
   } catch (error) {

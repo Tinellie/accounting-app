@@ -25,6 +25,12 @@ jobs:
           docker build -t ghcr.io/tinellie/accounting-app:${{ github.sha }} .
           docker run --rm -i --entrypoint node ghcr.io/tinellie/accounting-app:${{ github.sha }} \
             --input-type=module < scripts/pdf-runtime.test.mjs
+          check_container="accounting-auth-check-${{ github.run_id }}"
+          trap 'docker rm -f "$check_container" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$check_container" ghcr.io/tinellie/accounting-app:${{ github.sha }}
+          docker exec -i "$check_container" node --input-type=module < scripts/auth-image.test.mjs
+          docker rm -f "$check_container"
+          trap - EXIT
           docker build -t ghcr.io/tinellie/accounting-ocr:${{ github.sha }} scripts/wechat-ocr
       - name: Publish images
         env:
